@@ -34,7 +34,7 @@ export default async function EventsPage() {
     if (!acc[key]) acc[key] = []
     acc[key].push(ev)
     return acc
-  }, {} as Record<string, typeof events>)
+  }, {} as Record<string, any[]>)
 
   const eventLabel = (key: string) => EVENT_TYPES.find(t => t.key === key)?.label || key
 
