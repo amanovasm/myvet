@@ -1,27 +1,25 @@
 'use client'
 import { useState } from 'react'
-import Nav from '@/components/nav'
-import { FileText, Copy, Check } from 'lucide-react'
+import { FileText, Copy, Check, Share } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import TopBar from '@/components/TopBar'
+import BottomNav from '@/components/BottomNav'
+
+const PERIODS = [{ days: 30, label: '30 дней' }, { days: 90, label: '3 месяца' }, { days: 180, label: '6 месяцев' }]
 
 export default function ReportPage() {
-  const [days, setDays]       = useState(90)
-  const [report, setReport]   = useState('')
+  const [days, setDays] = useState(90)
+  const [report, setReport] = useState('')
   const [loading, setLoading] = useState(false)
-  const [copied, setCopied]   = useState(false)
+  const [copied, setCopied] = useState(false)
 
   async function generate() {
     setLoading(true)
     try {
-      const res = await fetch('/api/report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ days }),
-      })
+      const res = await fetch('/api/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ days }) })
       const data = await res.json()
       setReport(data.report || '')
-    } catch (e) {
-      console.error(e)
-    }
+    } catch {}
     setLoading(false)
   }
 
@@ -31,49 +29,67 @@ export default function ReportPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  async function share() {
+    if (navigator.share) {
+      await navigator.share({ title: 'Отчёт для ветеринара', text: report })
+    } else {
+      copy()
+    }
+  }
+
   return (
-    <main className="p-4 pb-24 max-w-md mx-auto">
-      <div className="pt-4 mb-4">
-        <h1 className="text-xl font-bold">Отчёт для врача</h1>
-        <p className="text-sm text-gray-400 mt-1">Структурированная история для консультации</p>
+    <div className="min-h-screen bg-[#F2F2F7] flex flex-col pb-16">
+      <div className="bg-white"><TopBar /></div>
+      <div className="px-3 py-2">
+        <p className="text-[10px] text-[#8E8E93]">Для ветеринара</p>
+        <h1 className="text-[20px] font-bold text-[#1C1C1E]">Отчёт</h1>
       </div>
 
-      {/* Период */}
-      <div className="card mb-4">
-        <p className="font-semibold mb-3">Период</p>
-        <div className="grid grid-cols-3 gap-2">
-          {[{v:30,label:'30 дней'},{v:90,label:'3 месяца'},{v:180,label:'6 месяцев'}].map(opt => (
-            <button key={opt.v} onClick={() => setDays(opt.v)}
-              className={`py-2.5 rounded-xl border-2 text-sm font-medium transition-all ${days === opt.v ? 'border-teal-500 bg-teal-50 text-teal-500' : 'border-gray-200 text-gray-500'}`}>
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <button onClick={generate} disabled={loading}
-        className="btn-primary mb-4 flex items-center justify-center gap-2">
-        <FileText size={18} />
-        {loading ? 'Формируем отчёт...' : 'Сформировать отчёт'}
-      </button>
-
-      {report && (
+      <div className="px-3 flex flex-col gap-3 pb-4">
+        {/* Период */}
         <div className="card">
-          <div className="flex items-center justify-between mb-3">
-            <p className="font-semibold text-sm">Готово</p>
-            <button onClick={copy}
-              className="flex items-center gap-1.5 text-sm text-teal-500 font-medium">
-              {copied ? <Check size={16} /> : <Copy size={16} />}
-              {copied ? 'Скопировано' : 'Копировать'}
-            </button>
+          <p className="section-title mb-2">Период</p>
+          <div className="grid grid-cols-3 gap-1.5">
+            {PERIODS.map(p => (
+              <button key={p.days} onClick={() => setDays(p.days)}
+                className={cn('rounded-[8px] py-2 border-[1.5px] text-[9px] font-bold transition-all',
+                  days === p.days ? 'border-[#FD6220] bg-[#FFF4EF] text-[#FD6220]' : 'border-[#E5E5EA] text-[#8E8E93]')}>
+                {p.label}
+              </button>
+            ))}
           </div>
-          <pre className="text-xs text-gray-600 whitespace-pre-wrap font-mono leading-relaxed">
-            {report}
-          </pre>
         </div>
-      )}
 
-      <Nav />
-    </main>
+        <button onClick={generate} disabled={loading}
+          className="btn-brand flex items-center justify-center gap-2 disabled:opacity-50">
+          <FileText size={16} />
+          {loading ? 'Формируем отчёт...' : 'Сформировать отчёт'}
+        </button>
+
+        {report && (
+          <div className="card">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] font-bold text-[#1C1C1E]">Готово</p>
+              <div className="flex gap-2">
+                <button onClick={copy}
+                  className="flex items-center gap-1 text-[9px] font-bold text-[#FD6220]">
+                  {copied ? <Check size={12} /> : <Copy size={12} />}
+                  {copied ? 'Скопировано' : 'Копировать'}
+                </button>
+                <button onClick={share}
+                  className="flex items-center gap-1 text-[9px] font-bold text-[#FD6220]">
+                  <Share size={12} />
+                  Поделиться
+                </button>
+              </div>
+            </div>
+            <pre className="text-[8px] font-medium text-[#3C3C43] whitespace-pre-wrap leading-relaxed font-mono bg-[#F9F9F9] rounded-[8px] p-2.5">
+              {report}
+            </pre>
+          </div>
+        )}
+      </div>
+      <BottomNav />
+    </div>
   )
 }

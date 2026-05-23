@@ -1,15 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
-
-// Типы из схемы БД
-export type Appetite  = 1 | 2 | 3
-export type Toilet    = 1 | 2 | 3
-export type Activity  = 1 | 2 | 3
-export type Direction = 'negative' | 'neutral' | 'positive'
+export const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 export interface Pet {
   id: string
@@ -17,47 +11,10 @@ export interface Pet {
   species: 'cat' | 'dog'
   breed?: string
   birth_date?: string
-  gender?: 'male' | 'female' | 'unknown'
+  gender?: 'female' | 'male' | 'unknown'
   diagnoses?: string
   allergies?: string
   vet_notes?: string
-  created_at: string
-}
-
-export interface DailyCheckin {
-  id: string
-  pet_id: string
-  date: string
-  appetite: Appetite
-  toilet: Toilet
-  activity: Activity
-  note?: string
-  created_at: string
-}
-
-export interface HealthEvent {
-  id: string
-  pet_id: string
-  identifier: string
-  event_type: string
-  direction: Direction
-  occurred_at: string
-  duration_sec?: number
-  had_aura?: boolean
-  observations?: string
-  created_at: string
-}
-
-export interface Medication {
-  id: string
-  pet_id: string
-  name: string
-  dose_amount?: number
-  dose_unit?: string
-  frequency?: string
-  started_at: string
-  ended_at?: string
-  change_note?: string
   created_at: string
 }
 
@@ -67,6 +24,71 @@ export interface WeightLog {
   weight_kg: number
   measured_at: string
   note?: string
+}
+
+export interface DailyCheckin {
+  id: string
+  pet_id: string
+  date: string
+  appetite: string
+  stool_count: number
+  stool_type: string
+  stool_smell: boolean
+  urine_count: number
+  urine_volume: string
+  activity: string
+  water_intake: string
+  note?: string
+  created_at: string
+}
+
+export interface HealthEvent {
+  id: string
+  pet_id: string
+  identifier: string
+  event_type: string
+  direction: 'negative' | 'neutral' | 'positive'
+  occurred_at: string
+  duration_sec?: number
+  had_aura?: boolean
+  observations_before?: string
+  description?: string
+  post_ictal_type?: string
+  post_ictal_notes?: string
+  observations_after?: string
+  created_at: string
+}
+
+export interface Medication {
+  id: string
+  pet_id: string
+  name: string
+  dose_amount?: number
+  dose_unit?: string
+  started_at: string
+  ended_at?: string
+  change_note?: string
+  created_at: string
+}
+
+export interface MedicationSchedule {
+  id: string
+  medication_id: string
+  pet_id: string
+  scheduled_time: string
+  dose_amount?: number
+  dose_unit?: string
+}
+
+export interface MedicationDose {
+  id: string
+  pet_id: string
+  medication_id: string
+  schedule_id: string
+  dose_date: string
+  scheduled_time: string
+  taken_at?: string
+  skipped?: boolean
   created_at: string
 }
 

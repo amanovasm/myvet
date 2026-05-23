@@ -1,39 +1,27 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  darkMode: ["class"],
-  content: [
-    './pages/**/*.{ts,tsx}',
-    './components/**/*.{ts,tsx}',
-    './app/**/*.{ts,tsx}',
-  ],
+  content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}'],
   theme: {
     extend: {
-      colors: {
-        teal: {
-          50:  '#E1F5EE',
-          100: '#C3EBD8',
-          500: '#0F6E56',
-          600: '#0C5C47',
-        },
-        coral: {
-          50:  '#FAECE7',
-          500: '#993C1D',
-        },
-        amber: {
-          50:  '#FAEEDA',
-          500: '#854F0B',
-        },
-        base: '#2C2C2A',
-      },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['Montserrat', 'system-ui', 'sans-serif'],
+      },
+      colors: {
+        brand: {
+          DEFAULT: '#FD6220',
+          light: '#FFF4EF',
+          border: '#FDD5C0',
+        },
+        surface: '#F2F2F7',
+        card: '#ffffff',
+        muted: '#8E8E93',
+        base: '#1C1C1E',
       },
       borderRadius: {
-        lg: '12px',
-        xl: '16px',
-        '2xl': '20px',
+        card: '13px',
+        phone: '26px',
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [],
 }

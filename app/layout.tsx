@@ -1,35 +1,24 @@
-import type { Metadata, Viewport } from 'next'
+import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
   title: 'myvet.kz',
   description: 'Дневник здоровья для животных с эпилепсией',
-  manifest: '/manifest.json',
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'default',
-    title: 'myvet.kz',
-  },
-}
-
-export const viewport: Viewport = {
-  themeColor: '#0F6E56',
-  width: 'device-width',
-  initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ru">
       <head>
-        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="mobile-web-app-capable" content="yes" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
       </head>
-      <body className="bg-gray-50 font-sans text-base antialiased max-w-md mx-auto min-h-screen">
-        {children}
+      <body className="min-h-screen bg-[#F2F2F7]">
+        <div className="max-w-md mx-auto min-h-screen relative">
+          {children}
+        </div>
       </body>
     </html>
   )

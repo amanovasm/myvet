@@ -1,164 +1,183 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { supabase, Medication } from '@/lib/supabase'
-import Nav from '@/components/nav'
-import { Plus, Check, ChevronDown, ChevronUp } from 'lucide-react'
-import { formatDateRu } from '@/lib/utils'
+import { supabase } from '@/lib/supabase'
+import { format, subDays, addDays } from 'date-fns'
+import { ru } from 'date-fns/locale'
+import { cn } from '@/lib/utils'
+import TopBar from '@/components/TopBar'
+import BottomNav from '@/components/BottomNav'
+import Link from 'next/link'
+import { Check } from 'lucide-react'
+
+interface MedWithSchedule {
+  id: string
+  name: string
+  dose_amount: number
+  dose_unit: string
+  schedules: { id: string; scheduled_time: string; dose_amount: number; dose_unit: string }[]
+}
+
+interface DoseStatus {
+  scheduleId: string
+  medId: string
+  medName: string
+  doseAmount: number
+  doseUnit: string
+  scheduledTime: string
+  takenAt?: string
+  doseId?: string
+}
 
 export default function MedicationsPage() {
-  const [petId, setPetId]           = useState<string | null>(null)
-  const [meds, setMeds]             = useState<Medication[]>([])
-  const [history, setHistory]       = useState<Medication[]>([])
-  const [showHistory, setShowHistory] = useState(false)
-  const [showForm, setShowForm]     = useState(false)
-  const [saving, setSaving]         = useState(false)
+  const [petId, setPetId] = useState<string | null>(null)
+  const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [doses, setDoses] = useState<Record<string, DoseStatus[]>>({})
+  const [loading, setLoading] = useState(true)
+  const [marking, setMarking] = useState<string | null>(null)
 
-  const [name, setName]             = useState('')
-  const [dose, setDose]             = useState('')
-  const [unit, setUnit]             = useState('mg')
-  const [frequency, setFrequency]   = useState('')
-  const [startedAt, setStartedAt]   = useState(new Date().toISOString().slice(0, 10))
-  const [changeNote, setChangeNote] = useState('')
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
+    const d = subDays(new Date(), 3 - i)
+    return { date: format(d, 'yyyy-MM-dd'), day: format(d, 'EEEEEE', { locale: ru }), num: format(d, 'd') }
+  })
 
   useEffect(() => {
     supabase.from('pets').select('id').limit(1).single().then(({ data }) => {
-      if (!data) return
-      setPetId(data.id)
-      loadMeds(data.id)
+      if (data) { setPetId(data.id); loadDoses(data.id, selectedDate) }
     })
   }, [])
 
-  async function loadMeds(pid: string) {
-    const { data: current } = await supabase
-      .from('medications').select('*').eq('pet_id', pid)
-      .is('ended_at', null).order('started_at', { ascending: false })
-    const { data: past } = await supabase
-      .from('medications').select('*').eq('pet_id', pid)
-      .not('ended_at', 'is', null).order('ended_at', { ascending: false })
-    setMeds(current || [])
-    setHistory(past || [])
+  async function loadDoses(pid: string, date: string) {
+    setLoading(true)
+    const { data: meds } = await supabase
+      .from('medications').select('*, medication_schedules(*)')
+      .eq('pet_id', pid).is('ended_at', null)
+
+    const { data: taken } = await supabase
+      .from('medication_doses').select('*')
+      .eq('pet_id', pid).eq('dose_date', date)
+
+    const grouped: Record<string, DoseStatus[]> = {}
+    for (const med of meds || []) {
+      for (const sch of (med.medication_schedules || [])) {
+        const timeKey = sch.scheduled_time.slice(0, 5)
+        const existing = taken?.find(t => t.schedule_id === sch.id && t.dose_date === date)
+        const item: DoseStatus = {
+          scheduleId: sch.id,
+          medId: med.id,
+          medName: med.name,
+          doseAmount: sch.dose_amount || med.dose_amount,
+          doseUnit: sch.dose_unit || med.dose_unit,
+          scheduledTime: timeKey,
+          takenAt: existing?.taken_at,
+          doseId: existing?.id,
+        }
+        if (!grouped[timeKey]) grouped[timeKey] = []
+        grouped[timeKey].push(item)
+      }
+    }
+    setDoses(grouped)
+    setLoading(false)
   }
 
-  async function save() {
-    if (!petId || !name) return
-    setSaving(true)
-    await supabase.from('medications').insert({
-      pet_id: petId, name,
-      dose_amount: dose ? parseFloat(dose) : null,
-      dose_unit: unit, frequency: frequency || null,
-      started_at: startedAt,
-      change_note: changeNote || null,
+  async function markDose(dose: DoseStatus) {
+    if (!petId || dose.takenAt) return
+    setMarking(dose.scheduleId)
+    const now = new Date().toISOString()
+    await supabase.from('medication_doses').insert({
+      pet_id: petId,
+      medication_id: dose.medId,
+      schedule_id: dose.scheduleId,
+      dose_date: selectedDate,
+      scheduled_time: dose.scheduledTime,
+      taken_at: now,
     })
-    setName(''); setDose(''); setFrequency(''); setChangeNote('')
-    setShowForm(false)
-    setSaving(false)
-    loadMeds(petId)
+    await loadDoses(petId, selectedDate)
+    setMarking(null)
   }
 
-  async function endMed(medId: string) {
-    await supabase.from('medications').update({ ended_at: new Date().toISOString().slice(0, 10) }).eq('id', medId)
-    if (petId) loadMeds(petId)
+  async function changeDate(date: string) {
+    setSelectedDate(date)
+    if (petId) loadDoses(petId, date)
   }
+
+  const sortedTimes = Object.keys(doses).sort()
+  const hasDoses = sortedTimes.length > 0
 
   return (
-    <main className="p-4 pb-24 max-w-md mx-auto">
-      <div className="flex items-center justify-between pt-4 mb-4">
-        <h1 className="text-xl font-bold">Лечение</h1>
-        <button onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-1.5 bg-teal-500 text-white px-3 py-2 rounded-xl text-sm font-medium">
-          <Plus size={16} />
-          Добавить
-        </button>
-      </div>
+    <div className="min-h-screen bg-[#F2F2F7] flex flex-col pb-16">
+      <div className="bg-white"><TopBar /></div>
 
-      {/* Форма добавления */}
-      {showForm && (
-        <div className="card mb-4 space-y-3">
-          <p className="font-semibold">Новый препарат</p>
-          <input value={name} onChange={e => setName(e.target.value)}
-            placeholder="Название препарата *"
-            className="w-full rounded-xl border border-gray-200 p-3 text-sm focus:outline-none focus:border-teal-500" />
-          <div className="grid grid-cols-3 gap-2">
-            <input value={dose} onChange={e => setDose(e.target.value)}
-              placeholder="Доза" type="number" step="0.1"
-              className="col-span-2 rounded-xl border border-gray-200 p-3 text-sm focus:outline-none focus:border-teal-500" />
-            <select value={unit} onChange={e => setUnit(e.target.value)}
-              className="rounded-xl border border-gray-200 p-3 text-sm focus:outline-none focus:border-teal-500">
-              <option>mg</option>
-              <option>mg/kg</option>
-              <option>ml</option>
-              <option>tab</option>
-            </select>
-          </div>
-          <input value={frequency} onChange={e => setFrequency(e.target.value)}
-            placeholder="Кратность (напр. 2 раза в день)"
-            className="w-full rounded-xl border border-gray-200 p-3 text-sm focus:outline-none focus:border-teal-500" />
-          <div>
-            <label className="text-xs text-gray-400 mb-1 block">Дата начала</label>
-            <input type="date" value={startedAt} onChange={e => setStartedAt(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 p-3 text-sm focus:outline-none focus:border-teal-500" />
-          </div>
-          <input value={changeNote} onChange={e => setChangeNote(e.target.value)}
-            placeholder="Причина изменения / комментарий"
-            className="w-full rounded-xl border border-gray-200 p-3 text-sm focus:outline-none focus:border-teal-500" />
-          <button onClick={save} disabled={!name || saving} className="btn-primary">
-            {saving ? 'Сохраняем...' : 'Сохранить'}
-          </button>
-        </div>
-      )}
-
-      {/* Текущие препараты */}
-      {meds.length === 0 && !showForm ? (
-        <div className="text-center py-12 text-gray-400">
-          <div className="text-4xl mb-3">💊</div>
-          <p>Препараты не добавлены</p>
-        </div>
-      ) : (
-        <div className="space-y-3 mb-4">
-          {meds.map(med => (
-            <div key={med.id} className="card">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="font-semibold">{med.name}</p>
-                  {med.dose_amount && (
-                    <p className="text-sm text-gray-500">{med.dose_amount} {med.dose_unit}{med.frequency ? ` · ${med.frequency}` : ''}</p>
-                  )}
-                  <p className="text-xs text-gray-400 mt-0.5">с {formatDateRu(med.started_at)}</p>
-                  {med.change_note && <p className="text-xs text-gray-400">{med.change_note}</p>}
-                </div>
-                <button onClick={() => endMed(med.id)}
-                  className="text-xs text-gray-400 border border-gray-200 rounded-lg px-2 py-1 flex-shrink-0">
-                  Отменить
-                </button>
+      {/* Недельный скроллер */}
+      <div className="bg-white px-3 py-2 border-b border-[#F2F2F7]">
+        <p className="text-[13px] font-bold text-[#1C1C1E] text-center mb-2">
+          {format(new Date(selectedDate), 'EEEE, d MMMM', { locale: ru })}
+        </p>
+        <div className="flex justify-around">
+          {weekDays.map(d => (
+            <button key={d.date} onClick={() => changeDate(d.date)}
+              className="flex flex-col items-center gap-1">
+              <span className="text-[8px] font-semibold text-[#8E8E93] capitalize">{d.day}</span>
+              <div className={cn('w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold',
+                d.date === selectedDate ? 'bg-[#FD6220] text-white' : 'text-[#8E8E93]')}>
+                {d.num}
               </div>
-            </div>
+              <div className={cn('w-1 h-1 rounded-full', doses[d.date] || d.date <= format(new Date(), 'yyyy-MM-dd') ? 'bg-[#FD6220]' : 'bg-[#E5E5EA]')} />
+            </button>
           ))}
         </div>
-      )}
+      </div>
 
-      {/* История */}
-      {history.length > 0 && (
-        <div>
-          <button onClick={() => setShowHistory(!showHistory)}
-            className="flex items-center gap-2 text-sm text-gray-400 font-medium mb-3">
-            {showHistory ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            История изменений ({history.length})
-          </button>
-          {showHistory && (
-            <div className="space-y-2">
-              {history.map(med => (
-                <div key={med.id} className="card opacity-60">
-                  <p className="font-medium text-sm">{med.name} — {med.dose_amount} {med.dose_unit}</p>
-                  <p className="text-xs text-gray-400">{formatDateRu(med.started_at)} → {med.ended_at ? formatDateRu(med.ended_at) : 'сейчас'}</p>
-                  {med.change_note && <p className="text-xs text-gray-400">{med.change_note}</p>}
-                </div>
-              ))}
+      <div className="px-3 py-3 flex flex-col gap-3">
+        {/* Кнопка добавить */}
+        <Link href="/medications/add" className="btn-brand block text-center py-3 text-[11px] rounded-[12px]">
+          + Добавить лекарство
+        </Link>
+
+        {loading ? (
+          <p className="text-center text-[#8E8E93] text-sm py-8">Загружаем...</p>
+        ) : !hasDoses ? (
+          <div className="text-center py-12 text-[#8E8E93]">
+            <p className="text-4xl mb-3">💊</p>
+            <p className="text-sm font-medium">Препаратов нет</p>
+            <p className="text-[10px] mt-1">Добавьте первый препарат</p>
+          </div>
+        ) : (
+          sortedTimes.map(time => (
+            <div key={time}>
+              <p className="text-[11px] font-bold text-[#1C1C1E] mb-1.5 px-1">{time}</p>
+              <div className="flex flex-col gap-1.5">
+                {doses[time].map(dose => (
+                  <div key={dose.scheduleId}
+                    className={cn('rounded-[11px] p-2.5 flex items-center gap-2.5 border',
+                      dose.takenAt ? 'bg-[#F4FFF7] border-[#C6EFD0]' : 'bg-[#F0F7FF] border-[#D0E8FF]')}>
+                    <div className={cn('w-7 h-7 rounded-[8px] flex items-center justify-center text-sm flex-shrink-0',
+                      dose.takenAt ? 'bg-[#C6EFD0]' : 'bg-[#D0E8FF]')}>💊</div>
+                    <div className="flex-1">
+                      <div className="text-[10px] font-bold text-[#1C1C1E]">{dose.medName}</div>
+                      <div className="text-[8px] text-[#8E8E93]">
+                        {dose.doseAmount} {dose.doseUnit}
+                        {dose.takenAt ? ` · дано в ${format(new Date(dose.takenAt), 'HH:mm')}` : ' · ещё не отмечено'}
+                      </div>
+                    </div>
+                    {dose.takenAt ? (
+                      <div className="w-6 h-6 rounded-full bg-[#C6EFD0] flex items-center justify-center flex-shrink-0">
+                        <Check size={12} className="text-green-600" />
+                      </div>
+                    ) : (
+                      <button onClick={() => markDose(dose)} disabled={marking === dose.scheduleId}
+                        className="w-6 h-6 rounded-full bg-[#E8F0FE] flex items-center justify-center flex-shrink-0 text-[#185FA5] font-bold text-lg disabled:opacity-50">
+                        +
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
-          )}
-        </div>
-      )}
+          ))
+        )}
+      </div>
 
-      <Nav />
-    </main>
+      <BottomNav />
+    </div>
   )
 }

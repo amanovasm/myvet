@@ -9,6 +9,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ content })
   } catch (e) {
     console.error(e)
-    return NextResponse.json({ error: 'Failed to generate digest' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed' }, { status: 500 })
   }
 }
