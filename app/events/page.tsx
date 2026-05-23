@@ -17,43 +17,50 @@ const DIR_TAG: Record<string, string> = {
   positive: 'bg-[#EDFAF2] text-green-500',
 }
 
-async function getEvents() {
+interface HealthEvent {
+  id: string
+  identifier: string
+  event_type: string
+  direction: string
+  occurred_at: string
+  duration_sec?: number
+  had_aura?: boolean
+  description?: string
+}
+
+async function getEvents(): Promise<HealthEvent[]> {
   const { data: pet } = await supabase.from('pets').select('id').limit(1).single()
   if (!pet) return []
   const { data } = await supabase
     .from('health_events').select('*').eq('pet_id', pet.id)
     .order('occurred_at', { ascending: false })
-  return data || []
+  return (data as HealthEvent[]) || []
 }
 
 export default async function EventsPage() {
   const events = await getEvents()
 
-  const grouped = events.reduce((acc, ev) => {
+  const grouped = events.reduce((acc: Record<string, HealthEvent[]>, ev: HealthEvent) => {
     const key = format(new Date(ev.occurred_at), 'd MMMM yyyy', { locale: ru })
     if (!acc[key]) acc[key] = []
     acc[key].push(ev)
     return acc
-  }, {} as Record<string, any[]>)
+  }, {} as Record<string, HealthEvent[]>)
 
   const eventLabel = (key: string) => EVENT_TYPES.find(t => t.key === key)?.label || key
 
   return (
     <div className="min-h-screen bg-[#F2F2F7] flex flex-col pb-16">
       <div className="bg-white"><TopBar /></div>
-
       <div className="px-3 py-2">
         <p className="text-[10px] text-[#8E8E93]">Наблюдения</p>
         <h1 className="text-[20px] font-bold text-[#1C1C1E]">События</h1>
       </div>
-
-      {/* Кнопка добавить — крупная, яркая */}
       <div className="px-3 mb-3">
         <Link href="/events/new" className="btn-brand block text-center py-3 text-[11px] rounded-[12px]">
           + Добавить событие
         </Link>
       </div>
-
       <div className="px-3 flex flex-col gap-2 pb-4">
         {Object.keys(grouped).length === 0 ? (
           <div className="text-center py-16 text-[#8E8E93]">
@@ -61,7 +68,7 @@ export default async function EventsPage() {
             <p className="text-sm font-medium">Событий пока нет</p>
           </div>
         ) : (
-          Object.entries(grouped).map(([date, evs]) => (
+          (Object.entries(grouped) as [string, HealthEvent[]][]).map(([date, evs]) => (
             <div key={date}>
               <p className="text-[9px] font-bold text-[#8E8E93] uppercase tracking-wide mb-1.5 px-1">{date}</p>
               <div className="card" style={{ padding: '6px 10px' }}>
@@ -89,7 +96,6 @@ export default async function EventsPage() {
           ))
         )}
       </div>
-
       <BottomNav />
     </div>
   )
