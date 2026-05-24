@@ -1,21 +1,13 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { format, subDays, addDays } from 'date-fns'
+import { format, subDays } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 import TopBar from '@/components/TopBar'
 import BottomNav from '@/components/BottomNav'
 import Link from 'next/link'
 import { Check } from 'lucide-react'
-
-interface MedWithSchedule {
-  id: string
-  name: string
-  dose_amount: number
-  dose_unit: string
-  schedules: { id: string; scheduled_time: string; dose_amount: number; dose_unit: string }[]
-}
 
 interface DoseStatus {
   scheduleId: string
@@ -42,31 +34,30 @@ export default function MedicationsPage() {
 
   useEffect(() => {
     supabase.from('pets').select('id').limit(1).single().then(({ data }) => {
-      if (data) { setPetId(data.id); loadDoses(data.id, selectedDate) }
+      if (data) { setPetId(data.id); loadDoses(data.id, format(new Date(), 'yyyy-MM-dd')) }
+      else setLoading(false)
     })
   }, [])
 
   async function loadDoses(pid: string, date: string) {
     setLoading(true)
-    const { data: meds } = await supabase
-      .from('medications').select('*, medication_schedules(*)')
-      .eq('pet_id', pid).is('ended_at', null)
 
-    const { data: taken } = await supabase
-      .from('medication_doses').select('*')
-      .eq('pet_id', pid).eq('dose_date', date)
+    // Используем API route с service role key
+    const res = await fetch(`/api/medications?petId=${pid}&date=${date}`)
+    const { meds, schedules, taken } = await res.json()
 
     const grouped: Record<string, DoseStatus[]> = {}
     for (const med of meds || []) {
-      for (const sch of (med.medication_schedules || [])) {
+      const medSchedules = (schedules || []).filter((s: any) => s.medication_id === med.id)
+      for (const sch of medSchedules) {
         const timeKey = sch.scheduled_time.slice(0, 5)
-        const existing = taken?.find(t => t.schedule_id === sch.id && t.dose_date === date)
+        const existing = (taken || []).find((t: any) => t.schedule_id === sch.id && t.dose_date === date)
         const item: DoseStatus = {
           scheduleId: sch.id,
           medId: med.id,
           medName: med.name,
           doseAmount: sch.dose_amount || med.dose_amount,
-          doseUnit: sch.dose_unit || med.dose_unit,
+          doseUnit: sch.dose_unit || med.dose_unit || 'мг',
           scheduledTime: timeKey,
           takenAt: existing?.taken_at,
           doseId: existing?.id,
@@ -82,64 +73,58 @@ export default function MedicationsPage() {
   async function markDose(dose: DoseStatus) {
     if (!petId || dose.takenAt) return
     setMarking(dose.scheduleId)
-    const now = new Date().toISOString()
     await supabase.from('medication_doses').insert({
       pet_id: petId,
       medication_id: dose.medId,
       schedule_id: dose.scheduleId,
       dose_date: selectedDate,
       scheduled_time: dose.scheduledTime,
-      taken_at: now,
+      taken_at: new Date().toISOString(),
     })
     await loadDoses(petId, selectedDate)
     setMarking(null)
   }
 
-  async function changeDate(date: string) {
+  function changeDate(date: string) {
     setSelectedDate(date)
     if (petId) loadDoses(petId, date)
   }
 
   const sortedTimes = Object.keys(doses).sort()
-  const hasDoses = sortedTimes.length > 0
 
   return (
     <div className="min-h-screen bg-[#F2F2F7] flex flex-col pb-16">
       <div className="bg-white"><TopBar /></div>
 
-      {/* Недельный скроллер */}
       <div className="bg-white px-3 py-2 border-b border-[#F2F2F7]">
         <p className="text-[13px] font-bold text-[#1C1C1E] text-center mb-2">
-          {format(new Date(selectedDate), 'EEEE, d MMMM', { locale: ru })}
+          {format(new Date(selectedDate + 'T12:00:00'), 'EEEE, d MMMM', { locale: ru })}
         </p>
         <div className="flex justify-around">
           {weekDays.map(d => (
-            <button key={d.date} onClick={() => changeDate(d.date)}
-              className="flex flex-col items-center gap-1">
+            <button key={d.date} onClick={() => changeDate(d.date)} className="flex flex-col items-center gap-1">
               <span className="text-[8px] font-semibold text-[#8E8E93] capitalize">{d.day}</span>
               <div className={cn('w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold',
                 d.date === selectedDate ? 'bg-[#FD6220] text-white' : 'text-[#8E8E93]')}>
                 {d.num}
               </div>
-              <div className={cn('w-1 h-1 rounded-full', doses[d.date] || d.date <= format(new Date(), 'yyyy-MM-dd') ? 'bg-[#FD6220]' : 'bg-[#E5E5EA]')} />
             </button>
           ))}
         </div>
       </div>
 
       <div className="px-3 py-3 flex flex-col gap-3">
-        {/* Кнопка добавить */}
-        <Link href="/medications/add" className="btn-brand block text-center py-3 text-[11px] rounded-[12px]">
+        <Link href="/medications/add"
+          className="block w-full bg-[#FD6220] text-white font-bold rounded-[12px] py-3 text-[11px] text-center">
           + Добавить лекарство
         </Link>
 
         {loading ? (
           <p className="text-center text-[#8E8E93] text-sm py-8">Загружаем...</p>
-        ) : !hasDoses ? (
+        ) : sortedTimes.length === 0 ? (
           <div className="text-center py-12 text-[#8E8E93]">
             <p className="text-4xl mb-3">💊</p>
             <p className="text-sm font-medium">Препаратов нет</p>
-            <p className="text-[10px] mt-1">Добавьте первый препарат</p>
           </div>
         ) : (
           sortedTimes.map(time => (
