@@ -162,15 +162,19 @@ export async function generateVetReport(petId: string, days = 90): Promise<strin
     lines.push('приступов не зафиксировано')
   }
 
-  lines.push('', '━━━━━━━━━━━━━━━━━━━━━', 'ДРУГИЕ СОБЫТИЯ', '━━━━━━━━━━━━━━━━━━━━━')
+  lines.push('', '━━━━━━━━━━━━━━━━━━━━━', 'НАБЛЮДЕНИЯ И САМОЧУВСТВИЕ', '━━━━━━━━━━━━━━━━━━━━━')
 
-  const otherEvents = (events || []).filter(e => e.event_type !== 'seizure' && !e.event_type.startsWith('test_'))
+  const otherEvents = (events || []).filter(e => e.event_type !== 'seizure' && !e.event_type.startsWith('test_') && !e.identifier?.startsWith('TEST-') && !e.identifier?.startsWith('DEBUG-'))
   if (otherEvents.length > 0) {
+    // Показываем список событий
     otherEvents.forEach(e => {
-      lines.push(`${format(new Date(e.occurred_at), 'dd.MM.yyyy')}: ${evLabel(e.event_type)}${e.description ? ` — ${e.description}` : ''}`)
+      const sign = e.direction === 'positive' ? '+' : e.direction === 'negative' ? '−' : '·'
+      lines.push(`${sign} ${format(new Date(e.occurred_at), 'dd.MM')}: ${evLabel(e.event_type)}${e.description ? ` — ${e.description}` : ''}`)
     })
+    lines.push('')
+    // AI-анализ добавляется отдельно через analyzeEvents
   } else {
-    lines.push('других событий нет')
+    lines.push('значимых наблюдений нет')
   }
 
   lines.push(
@@ -182,4 +186,43 @@ export async function generateVetReport(petId: string, days = 90): Promise<strin
   )
 
   return lines.join('\n')
+}
+
+export async function analyzeEvents(events: any[]): Promise<string> {
+  if (!events || events.length === 0) return 'событий не зафиксировано'
+
+  const EVENT_LABELS: Record<string, string> = {
+    seizure: 'Приступ', head_pressing: 'Хедпрессинг', food_refusal: 'Отказ от еды',
+    loaf_position: 'Буханка', no_urine_24h: 'Нет мочи 24ч+', no_stool_48h: 'Нет стула 48ч+',
+    vomiting: 'Рвота', strange_behavior: 'Странное поведение', claw_sharpening: 'Точение когтей',
+    meowing: 'Мяуканье', chirping: 'Чириканье', active_play: 'Активные игры',
+  }
+
+  const realEvents = events.filter(e =>
+    !e.event_type.startsWith('test_') &&
+    !e.identifier.startsWith('TEST-') &&
+    !e.identifier.startsWith('DEBUG-')
+  )
+
+  if (realEvents.length === 0) return 'значимых событий не зафиксировано'
+
+  const eventList = realEvents.map(e =>
+    `${e.direction === 'positive' ? '+' : e.direction === 'negative' ? '-' : '~'} ${EVENT_LABELS[e.event_type] || e.event_type}${e.description ? `: ${e.description}` : ''}`
+  ).join('\n')
+
+  const response = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 200,
+    messages: [{
+      role: 'user',
+      content: `Проанализируй события наблюдения за животным с эпилепсией. Скажи коротко (2-3 предложения) что они говорят о самочувствии животного за период. Не ставь диагнозы. Говори нейтрально.
+
+События:
+${eventList}
+
+Ответ на русском, 2-3 предложения максимум.`
+    }],
+  })
+
+  return response.content[0].type === 'text' ? response.content[0].text : eventList
 }

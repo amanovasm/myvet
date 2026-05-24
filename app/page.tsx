@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import { getAge, formatRelative } from '@/lib/utils'
+import { getAge, formatRelative, EVENT_TYPES } from '@/lib/utils'
 import TopBar from '@/components/TopBar'
 import BottomNav from '@/components/BottomNav'
 import Link from 'next/link'
@@ -186,7 +186,7 @@ export default function Dashboard() {
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full flex-shrink-0 ${DIR_DOT[lastEvent.direction]}`} />
               <div className="flex-1">
-                <div className="text-[10px] font-bold text-[#1C1C1E]">{lastEvent.event_type}</div>
+                <div className="text-[10px] font-bold text-[#1C1C1E]">{EVENT_TYPES.find(t => t.key === lastEvent.event_type)?.label || lastEvent.event_type}</div>
                 <div className="text-[8px] text-[#8E8E93]">{formatRelative(lastEvent.occurred_at)} · {lastEvent.identifier}</div>
               </div>
             </div>
