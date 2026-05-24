@@ -8,31 +8,40 @@ import { ru } from 'date-fns/locale'
 import TopBar from '@/components/TopBar'
 import BottomNav from '@/components/BottomNav'
 import { Check } from 'lucide-react'
+import Link from 'next/link'
 
-function TapGrid({ options, value, onChange, cols = 3 }: {
+interface TapGridProps {
   options: { value: string; label: string }[]
   value: string
   onChange: (v: string) => void
   cols?: number
-}) {
+}
+
+function TapGrid({ options, value, onChange, cols = 3 }: TapGridProps) {
   return (
-    <div className={`grid gap-1.5 ${cols === 2 ? 'grid-cols-2' : cols === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+    <div className={`grid gap-1.5 ${cols === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
       {options.map(opt => (
         <button
           key={opt.value}
           onClick={() => onChange(opt.value)}
-          className={cn('tap-option', value === opt.value && 'selected', opt.value === 'refused' && 'col-span-full')}
+          className={cn(
+            'rounded-[8px] py-[5px] px-[3px] text-center border-[1.5px] border-[#E5E5EA] bg-white cursor-pointer',
+            value === opt.value && 'border-[#FD6220] bg-[#FFF4EF]',
+            opt.value === 'refused' && 'col-span-full'
+          )}
         >
-          <span>{opt.label}</span>
+          <span className={cn('text-[8px] font-semibold', value === opt.value ? 'text-[#FD6220]' : 'text-[#8E8E93]')}>
+            {opt.label}
+          </span>
         </button>
       ))}
     </div>
   )
 }
 
-function Stepper({ value, onChange, min = 0, max = 20 }: {
-  value: number; onChange: (v: number) => void; min?: number; max?: number
-}) {
+interface StepperProps { value: number; onChange: (v: number) => void; min?: number; max?: number }
+
+function Stepper({ value, onChange, min = 0, max = 20 }: StepperProps) {
   return (
     <div className="flex items-center gap-2">
       <button onClick={() => onChange(Math.max(min, value - 1))}
@@ -45,7 +54,6 @@ function Stepper({ value, onChange, min = 0, max = 20 }: {
 }
 
 export default function CheckinPage() {
-  const router = useRouter()
   const [petId, setPetId] = useState<string | null>(null)
   const [existing, setExisting] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -81,74 +89,96 @@ export default function CheckinPage() {
     setSaving(true)
     await supabase.from('daily_checkins').upsert({
       pet_id: petId, date: today,
-      appetite, stool_count: stoolCount, stool_type: stoolType,
+      appetite, stool_count: stoolCount, stool_type: stoolType || null,
       stool_smell: stoolSmell, urine_count: urineCount,
-      urine_volume: urineVolume, activity, water_intake: water,
+      urine_volume: urineVolume || null, activity, water_intake: water,
       note: note || null,
     }, { onConflict: 'pet_id,date' })
+    setSaving(false)
     setDone(true)
-    setTimeout(() => router.push('/'), 1200)
   }
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><p className="text-[#8E8E93] text-sm">Загружаем...</p></div>
+  const APPETITE_LABEL: Record<string, string> = {
+    refused: 'Отказ', weak: 'Слабый', moderate: 'Умеренный',
+    good: 'Хороший', excellent: 'Отличный', above_normal: 'Выше нормы',
+  }
+  const ACTIVITY_LABEL: Record<string, string> = {
+    lethargic: 'Вялая', moderate: 'Средняя', active: 'Активная',
+  }
 
-  if (done) return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-3">
-      <div className="w-14 h-14 rounded-full bg-[#FD6220] flex items-center justify-center">
-        <Check size={28} className="text-white" />
-      </div>
-      <p className="font-bold text-base">Чек-ин сохранён</p>
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <p className="text-[#8E8E93] text-sm">Загружаем...</p>
     </div>
   )
 
-  if (existing) return (
-    <div className="min-h-screen bg-[#F2F2F7] flex flex-col pb-16">
-      <div className="bg-white"><TopBar showBack backHref="/" backLabel="Главная" title="Чек-ин" /></div>
-      <div className="px-3 py-3 flex flex-col gap-3">
-        <div className="card" style={{ background: '#F4FFF7', borderColor: '#C6EFD0' }}>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-[#1C1C1E]">✅ Всё отмечено</span>
-            <span className="text-[7px] font-bold text-[#8E8E93] bg-[#F2F2F7] px-1.5 py-0.5 rounded-[5px]">🔒 Закрыт</span>
-          </div>
-          {[
-            ['Аппетит', existing.appetite],
-            ['Стул', `${existing.stool_count} раз · ${existing.stool_type}`],
-            ['Запах стула', existing.stool_smell ? 'Есть' : 'Нет'],
-            ['Моча', `${existing.urine_count} раз · ${existing.urine_volume}`],
-            ['Активность', existing.activity],
-            ['Вода', existing.water_intake],
-          ].map(([k, v]) => (
-            <div key={k} className="flex justify-between py-1.5 border-b border-[#F2F2F7] last:border-0">
-              <span className="text-[8px] font-semibold text-[#8E8E93]">{k}</span>
-              <span className="text-[9px] font-bold text-[#1C1C1E]">{v}</span>
-            </div>
-          ))}
+  // Заполнен — показываем результат
+  if (existing || done) {
+    const data = existing || { appetite, stool_count: stoolCount, stool_type: stoolType, stool_smell: stoolSmell, urine_count: urineCount, urine_volume: urineVolume, activity, water_intake: water, note }
+    return (
+      <div className="min-h-screen bg-[#F2F2F7] flex flex-col pb-16">
+        <div className="bg-white">
+          <TopBar showBack backHref="/" backLabel="Главная" title="Чек-ин" />
         </div>
-        <p className="text-[9px] text-[#8E8E93] text-center">Чек-ин за сегодня уже заполнен и закрыт для редактирования</p>
+        <div className="px-3 py-2 mb-1">
+          <p className="text-[10px] text-[#8E8E93]">Ежедневно</p>
+          <h1 className="text-[20px] font-bold text-[#1C1C1E]">Чек-ин</h1>
+          <p className="text-[10px] text-[#8E8E93] capitalize">{todayLabel}</p>
+        </div>
+        <div className="px-3 flex flex-col gap-3">
+          {done && (
+            <div className="flex items-center gap-2 bg-[#F4FFF7] border border-[#C6EFD0] rounded-[13px] p-3">
+              <Check size={16} className="text-green-500 flex-shrink-0" />
+              <p className="text-[10px] font-bold text-[#1C1C1E]">Чек-ин сохранён!</p>
+            </div>
+          )}
+          <div className="card" style={{ background: '#F4FFF7', borderColor: '#C6EFD0' }}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-bold text-[#1C1C1E]">✅ Сегодня заполнен</span>
+              <span className="text-[7px] font-bold text-[#8E8E93] bg-[#F2F2F7] px-1.5 py-0.5 rounded-[5px]">🔒 Закрыт</span>
+            </div>
+            {[
+              ['Аппетит', APPETITE_LABEL[data.appetite] || data.appetite],
+              ['Стул', `${data.stool_count} раз · ${data.stool_type || '—'}`],
+              ['Запах стула', data.stool_smell === true ? 'Есть' : data.stool_smell === false ? 'Нет' : '—'],
+              ['Моча', `${data.urine_count} раз · ${data.urine_volume || '—'}`],
+              ['Активность', ACTIVITY_LABEL[data.activity] || data.activity],
+              ['Вода', data.water_intake],
+              ...(data.note ? [['Заметки', data.note]] : []),
+            ].map(([k, v]) => (
+              <div key={k} className="flex justify-between py-1.5 border-b border-[#F2F2F7] last:border-0">
+                <span className="text-[8px] font-semibold text-[#8E8E93]">{k}</span>
+                <span className="text-[9px] font-bold text-[#1C1C1E]">{v}</span>
+              </div>
+            ))}
+          </div>
+          <Link href="/" className="btn-brand block text-center">
+            ← На главную
+          </Link>
+          <p className="text-[9px] text-[#8E8E93] text-center">Чек-ин закрыт для редактирования</p>
+        </div>
+        <BottomNav />
       </div>
-      <BottomNav />
-    </div>
-  )
+    )
+  }
 
   const canSave = appetite && activity && water
 
   return (
     <div className="min-h-screen bg-[#F2F2F7] flex flex-col pb-16">
-      <div className="bg-white"><TopBar showBack backHref="/" backLabel="Главная" title="Чек-ин" /></div>
+      <div className="bg-white">
+        <TopBar showBack backHref="/" backLabel="Главная" title="Чек-ин" />
+      </div>
       <div className="px-3 py-2 mb-1">
         <p className="text-[10px] text-[#8E8E93]">Ежедневно</p>
         <h1 className="text-[20px] font-bold text-[#1C1C1E]">Чек-ин</h1>
         <p className="text-[10px] text-[#8E8E93] capitalize">{todayLabel}</p>
       </div>
-
       <div className="px-3 flex flex-col gap-3 pb-4">
-        {/* Аппетит */}
         <div className="card">
           <div className="section-title">Аппетит *</div>
           <TapGrid options={APPETITE_OPTIONS} value={appetite} onChange={setAppetite} cols={3} />
         </div>
-
-        {/* Стул */}
         <div className="card">
           <div className="section-title">Стул</div>
           <div className="flex items-center justify-between py-1.5 border-b border-[#F2F2F7]">
@@ -162,13 +192,17 @@ export default function CheckinPage() {
           <div className="mt-2">
             <p className="text-[8px] font-bold text-[#8E8E93] uppercase tracking-wide mb-1.5">Запах</p>
             <div className="grid grid-cols-2 gap-1.5">
-              <button onClick={() => setStoolSmell(false)} className={cn('tap-option', stoolSmell === false && 'selected')}><span>Без запаха</span></button>
-              <button onClick={() => setStoolSmell(true)} className={cn('tap-option', stoolSmell === true && 'selected')}><span>С запахом</span></button>
+              <button onClick={() => setStoolSmell(false)}
+                className={cn('rounded-[8px] py-[5px] border-[1.5px] border-[#E5E5EA] bg-white', stoolSmell === false && 'border-[#FD6220] bg-[#FFF4EF]')}>
+                <span className={cn('text-[8px] font-semibold', stoolSmell === false ? 'text-[#FD6220]' : 'text-[#8E8E93]')}>Без запаха</span>
+              </button>
+              <button onClick={() => setStoolSmell(true)}
+                className={cn('rounded-[8px] py-[5px] border-[1.5px] border-[#E5E5EA] bg-white', stoolSmell === true && 'border-[#FD6220] bg-[#FFF4EF]')}>
+                <span className={cn('text-[8px] font-semibold', stoolSmell === true ? 'text-[#FD6220]' : 'text-[#8E8E93]')}>С запахом</span>
+              </button>
             </div>
           </div>
         </div>
-
-        {/* Мочеиспускание */}
         <div className="card">
           <div className="section-title">Мочеиспускание</div>
           <div className="flex items-center justify-between py-1.5 border-b border-[#F2F2F7]">
@@ -180,31 +214,20 @@ export default function CheckinPage() {
             <TapGrid options={URINE_VOLUME_OPTIONS} value={urineVolume} onChange={setUrineVolume} cols={2} />
           </div>
         </div>
-
-        {/* Активность */}
         <div className="card">
           <div className="section-title">Активность *</div>
           <TapGrid options={ACTIVITY_OPTIONS} value={activity} onChange={setActivity} cols={3} />
         </div>
-
-        {/* Вода */}
         <div className="card">
           <div className="section-title">Вода *</div>
           <TapGrid options={WATER_OPTIONS} value={water} onChange={setWater} cols={2} />
         </div>
-
-        {/* Заметки */}
         <div className="card">
           <div className="section-title">Заметки <span className="text-[8px] font-normal text-[#8E8E93]">(необязательно)</span></div>
-          <textarea
-            value={note}
-            onChange={e => setNote(e.target.value)}
-            placeholder="Что-то необычное сегодня?"
-            rows={2}
-            className="w-full border border-[#E5E5EA] rounded-[8px] p-2 text-[10px] font-medium resize-none outline-none focus:border-[#FD6220] bg-white"
-          />
+          <textarea value={note} onChange={e => setNote(e.target.value)}
+            placeholder="Что-то необычное сегодня?" rows={2}
+            className="w-full border border-[#E5E5EA] rounded-[8px] p-2 text-[10px] font-medium resize-none outline-none focus:border-[#FD6220]" />
         </div>
-
         <button onClick={save} disabled={!canSave || saving} className="btn-brand disabled:opacity-50">
           {saving ? 'Сохраняем...' : 'Сохранить чек-ин'}
         </button>
