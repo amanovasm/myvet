@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
@@ -28,18 +28,15 @@ export default function Dashboard() {
   const [weight, setWeight] = useState<any>(null)
   const [meds, setMeds] = useState<any[]>([])
 
-  useEffect(() => {
-    loadData()
-  }, [])
+  const today = format(new Date(), 'yyyy-MM-dd')
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     const { data: p } = await supabase.from('pets').select('*').limit(1).single()
     if (!p) { setLoading(false); return }
     setPet(p)
 
-    const today = format(new Date(), 'yyyy-MM-dd')
     const [c, ev, dg, wt, md] = await Promise.all([
-      supabase.from('daily_checkins').select('*').eq('pet_id', p.id).eq('date', today).single(),
+      supabase.from('daily_checkins').select('*').eq('pet_id', p.id).eq('date', today).maybeSingle(),
       supabase.from('health_events').select('*').eq('pet_id', p.id).order('occurred_at', { ascending: false }).limit(1),
       supabase.from('ai_digests').select('*').eq('pet_id', p.id).order('created_at', { ascending: false }).limit(1),
       supabase.from('weight_log').select('*').eq('pet_id', p.id).order('measured_at', { ascending: false }).limit(1),
@@ -52,7 +49,23 @@ export default function Dashboard() {
     setWeight(wt.data?.[0] || null)
     setMeds(md.data || [])
     setLoading(false)
-  }
+  }, [today])
+
+  // Загружаем при монтировании
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  // Перезагружаем при возвращении на страницу (visibility change)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        loadData()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [loadData])
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-[#F2F2F7]">
@@ -93,7 +106,7 @@ export default function Dashboard() {
               <div className="text-[14px] font-bold text-[#1C1C1E]">{pet.name}</div>
               <div className="text-[9px] font-semibold text-[#FD6220] truncate">{pet.diagnoses || 'Диагноз не указан'}</div>
             </div>
-            <Link href="/pet" className="text-[9px] font-bold text-[#FD6220] bg-white px-2 py-1 rounded-[6px] border border-[#FDD5C0]">
+            <Link href="/pet" className="text-[9px] font-bold text-[#FD6220] bg-white px-2 py-1 rounded-[6px] border border-[#FDD5C0] flex-shrink-0">
               Изменить
             </Link>
           </div>
@@ -130,7 +143,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Чек-ин */}
+        {/* Чек-ин — проверяем по дате */}
         {checkin ? (
           <div className="bg-white rounded-[13px] border border-[#C6EFD0] p-[10px_11px]" style={{ background: '#F4FFF7' }}>
             <div className="flex items-center justify-between mb-2">
@@ -182,7 +195,7 @@ export default function Dashboard() {
 
         {/* Дайджест */}
         {digest && (
-          <div className="bg-white rounded-[13px] p-[10px_11px]" style={{ borderLeft: '2.5px solid #FD6220', borderRadius: '0 13px 13px 0', border: '0.5px solid #E5E5EA', borderLeftWidth: '2.5px', borderLeftColor: '#FD6220' }}>
+          <div className="bg-white rounded-[13px] p-[10px_11px]" style={{ borderLeft: '2.5px solid #FD6220', border: '0.5px solid #E5E5EA', borderLeftWidth: '2.5px', borderLeftColor: '#FD6220' }}>
             <div className="text-[8px] font-bold text-[#8E8E93] uppercase tracking-wide mb-1">Дайджест</div>
             <p className="text-[9px] font-medium text-[#3C3C43] leading-relaxed line-clamp-3">{digest.content}</p>
             <Link href="/digest" className="text-[9px] font-bold text-[#FD6220] mt-1 block">Читать →</Link>
