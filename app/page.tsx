@@ -37,7 +37,7 @@ export default function Dashboard() {
 
     const [c, ev, dg, wt, md] = await Promise.all([
       supabase.from('daily_checkins').select('*').eq('pet_id', p.id).eq('date', today).maybeSingle(),
-      supabase.from('health_events').select('*').eq('pet_id', p.id).order('occurred_at', { ascending: false }).limit(1),
+      supabase.from('health_events').select('*').eq('pet_id', p.id).order('occurred_at', { ascending: false }).not('event_type', 'like', 'test_%').limit(1),
       supabase.from('ai_digests').select('*').eq('pet_id', p.id).order('created_at', { ascending: false }).limit(1),
       supabase.from('weight_log').select('*').eq('pet_id', p.id).order('measured_at', { ascending: false }).limit(1),
       supabase.from('medications').select('*').eq('pet_id', p.id).is('ended_at', null).order('name'),
