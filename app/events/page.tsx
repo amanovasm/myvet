@@ -1,3 +1,5 @@
+'use client'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
@@ -5,8 +7,6 @@ import TopBar from '@/components/TopBar'
 import BottomNav from '@/components/BottomNav'
 import Link from 'next/link'
 import { EVENT_TYPES, formatTimeRu, durationLabel } from '@/lib/utils'
-
-export const dynamic = 'force-dynamic'
 
 const DIR_DOT: Record<string, string> = {
   negative: 'bg-red-500', neutral: 'bg-orange-400', positive: 'bg-green-500',
@@ -24,28 +24,43 @@ interface HealthEvent {
   direction: string
   occurred_at: string
   duration_sec?: number
-  had_aura?: boolean
+  had_aura?: boolean | null
   description?: string
 }
 
-async function getEvents(): Promise<HealthEvent[]> {
-  const { data: pet } = await supabase.from('pets').select('id').limit(1).single()
-  if (!pet) return []
-  const { data } = await supabase
-    .from('health_events').select('*').eq('pet_id', pet.id)
-    .order('occurred_at', { ascending: false })
-  return (data as HealthEvent[]) || []
-}
+export default function EventsPage() {
+  const [events, setEvents] = useState<HealthEvent[]>([])
+  const [loading, setLoading] = useState(true)
 
-export default async function EventsPage() {
-  const events = await getEvents()
+  useEffect(() => {
+    loadEvents()
+  }, [])
 
-  const grouped = events.reduce((acc: Record<string, HealthEvent[]>, ev: HealthEvent) => {
+  // Перезагружаем при возвращении на страницу
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') loadEvents()
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [])
+
+  async function loadEvents() {
+    const { data: pet } = await supabase.from('pets').select('id').limit(1).single()
+    if (!pet) { setLoading(false); return }
+    const { data } = await supabase
+      .from('health_events').select('*').eq('pet_id', pet.id)
+      .order('occurred_at', { ascending: false })
+    setEvents((data as HealthEvent[]) || [])
+    setLoading(false)
+  }
+
+  const grouped = events.reduce((acc: Record<string, HealthEvent[]>, ev) => {
     const key = format(new Date(ev.occurred_at), 'd MMMM yyyy', { locale: ru })
     if (!acc[key]) acc[key] = []
     acc[key].push(ev)
     return acc
-  }, {} as Record<string, HealthEvent[]>)
+  }, {})
 
   const eventLabel = (key: string) => EVENT_TYPES.find(t => t.key === key)?.label || key
 
@@ -57,21 +72,24 @@ export default async function EventsPage() {
         <h1 className="text-[20px] font-bold text-[#1C1C1E]">События</h1>
       </div>
       <div className="px-3 mb-3">
-        <Link href="/events/new" className="btn-brand block text-center py-3 text-[11px] rounded-[12px]">
+        <Link href="/events/new"
+          className="block w-full bg-[#FD6220] text-white font-bold rounded-[12px] py-3 text-[11px] text-center">
           + Добавить событие
         </Link>
       </div>
       <div className="px-3 flex flex-col gap-2 pb-4">
-        {Object.keys(grouped).length === 0 ? (
+        {loading ? (
+          <p className="text-center text-[#8E8E93] text-sm py-8">Загружаем...</p>
+        ) : Object.keys(grouped).length === 0 ? (
           <div className="text-center py-16 text-[#8E8E93]">
             <p className="text-4xl mb-3">📋</p>
             <p className="text-sm font-medium">Событий пока нет</p>
           </div>
         ) : (
-          (Object.entries(grouped) as [string, HealthEvent[]][]).map(([date, evs]) => (
+          Object.entries(grouped).map(([date, evs]) => (
             <div key={date}>
               <p className="text-[9px] font-bold text-[#8E8E93] uppercase tracking-wide mb-1.5 px-1">{date}</p>
-              <div className="card" style={{ padding: '6px 10px' }}>
+              <div className="bg-white rounded-[13px] border border-[#E5E5EA]" style={{ padding: '6px 10px' }}>
                 {evs.map((ev, i) => (
                   <div key={ev.id} className={`flex items-start gap-2 py-2 ${i < evs.length - 1 ? 'border-b border-[#F2F2F7]' : ''}`}>
                     <div className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${DIR_DOT[ev.direction]}`} />
@@ -80,7 +98,7 @@ export default async function EventsPage() {
                       <div className="text-[8px] text-[#8E8E93] mt-0.5">
                         {ev.identifier} · {formatTimeRu(ev.occurred_at)}
                         {ev.duration_sec ? ` · ${durationLabel(ev.duration_sec)}` : ''}
-                        {ev.had_aura === true ? ' · с аурой' : ''}
+                        {ev.had_aura === true ? ' · с аурой' : ev.had_aura === false ? ' · без ауры' : ''}
                       </div>
                       {ev.description && (
                         <p className="text-[8px] text-[#3C3C43] mt-1 line-clamp-2">{ev.description}</p>

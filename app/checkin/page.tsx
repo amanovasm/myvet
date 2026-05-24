@@ -77,8 +77,8 @@ export default function CheckinPage() {
     supabase.from('pets').select('id').limit(1).single().then(({ data }) => {
       if (!data) { setLoading(false); return }
       setPetId(data.id)
-      supabase.from('daily_checkins').select('*').eq('pet_id', data.id).eq('date', today).single().then(({ data: c }) => {
-        if (c) setExisting(c)
+      supabase.from('daily_checkins').select('*').eq('pet_id', data.id).eq('date', today).limit(1).then((c) => {
+        if (c.data && c.data.length > 0) setExisting(c.data[0])
         setLoading(false)
       })
     })
