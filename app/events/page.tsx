@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
 import { format, subDays } from 'date-fns'
 import { ru } from 'date-fns/locale'
@@ -24,7 +24,7 @@ interface HealthEvent {
   duration_sec?: number; had_aura?: boolean | null; description?: string
 }
 
-export default function EventsPage() {
+function EventsContent() {
   const searchParams = useSearchParams()
   const [petId, setPetId] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
@@ -49,19 +49,15 @@ export default function EventsPage() {
 
   useEffect(() => {
     supabase.from('pets').select('id').limit(1).single().then(({ data }) => {
-      if (data) {
-        setPetId(data.id)
-        loadEvents(data.id, format(new Date(), 'yyyy-MM-dd'))
-      } else setLoading(false)
+      if (data) { setPetId(data.id); loadEvents(data.id, format(new Date(), 'yyyy-MM-dd')) }
+      else setLoading(false)
     })
   }, [loadEvents])
 
-  // Перезагружаем когда приходим со страницы сохранения (refresh параметр)
+  // Перезагружаем при возврате со страницы сохранения
   useEffect(() => {
     const refresh = searchParams.get('refresh')
-    if (refresh && petId) {
-      loadEvents(petId, selectedDate)
-    }
+    if (refresh && petId) loadEvents(petId, selectedDate)
   }, [searchParams, petId, selectedDate, loadEvents])
 
   function changeDate(date: string) {
@@ -73,9 +69,7 @@ export default function EventsPage() {
   const selectedLabel = format(new Date(selectedDate + 'T12:00:00'), 'EEEE, d MMMM', { locale: ru })
 
   return (
-    <div className="min-h-screen bg-[#F2F2F7] flex flex-col pb-16">
-      <div className="bg-white"><TopBar /></div>
-
+    <>
       <div className="bg-white px-3 py-2 border-b border-[#F2F2F7]">
         <p className="text-[13px] font-bold text-[#1C1C1E] text-center mb-2 capitalize">{selectedLabel}</p>
         <div className="flex justify-around">
@@ -126,6 +120,17 @@ export default function EventsPage() {
           </div>
         )}
       </div>
+    </>
+  )
+}
+
+export default function EventsPage() {
+  return (
+    <div className="min-h-screen bg-[#F2F2F7] flex flex-col pb-16">
+      <div className="bg-white"><TopBar /></div>
+      <Suspense fallback={<p className="text-center text-[#8E8E93] text-sm py-8">Загружаем...</p>}>
+        <EventsContent />
+      </Suspense>
       <BottomNav />
     </div>
   )
