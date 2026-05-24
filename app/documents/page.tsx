@@ -6,7 +6,7 @@ import { ru } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 import TopBar from '@/components/TopBar'
 import BottomNav from '@/components/BottomNav'
-import { Upload, AlertCircle, CheckCircle } from 'lucide-react'
+import { Upload, AlertCircle, CheckCircle, X } from 'lucide-react'
 
 const DOC_TYPE_LABEL: Record<string, string> = {
   oac: 'ОАК', biochemistry: 'Биохимия', urinalysis: 'Анализ мочи',
@@ -29,10 +29,14 @@ export default function DocumentsPage() {
   const [labResults, setLabResults] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
-  const [uploadError, setUploadError] = useState('')
-  const [uploadSuccess, setUploadSuccess] = useState('')
+  const [status, setStatus] = useState<{type: 'error'|'success'|'info', text: string} | null>(null)
   const [tab, setTab] = useState<'docs' | 'dynamics'>('docs')
   const [selectedCategory, setSelectedCategory] = useState('all')
+  // Manual input state
+  const [showManual, setShowManual] = useState(false)
+  const [manualText, setManualText] = useState('')
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [submittingManual, setSubmittingManual] = useState(false)
 
   useEffect(() => {
     supabase.from('pets').select('id').limit(1).single().then(({ data }) => {
@@ -44,8 +48,8 @@ export default function DocumentsPage() {
   async function loadAll(pid: string) {
     setLoading(true)
     const [docsRes, labRes] = await Promise.all([
-      fetch(`/api/documents?petId=${pid}`),
-      fetch(`/api/lab-results?petId=${pid}`),
+      fetch(`/api/documents?petId=${pid}&_t=${Date.now()}`),
+      fetch(`/api/lab-results?petId=${pid}&_t=${Date.now()}`),
     ])
     setDocuments((await docsRes.json()).documents || [])
     setLabResults((await labRes.json()).results || [])
@@ -55,10 +59,10 @@ export default function DocumentsPage() {
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file || !petId) return
-    if (file.type !== 'application/pdf') { setUploadError('Только PDF файлы'); return }
+    if (file.type !== 'application/pdf') { setStatus({type:'error', text:'Только PDF файлы'}); return }
+
     setUploading(true)
-    setUploadError('')
-    setUploadSuccess('')
+    setStatus(null)
 
     const formData = new FormData()
     formData.append('petId', petId)
@@ -66,15 +70,43 @@ export default function DocumentsPage() {
 
     const res = await fetch('/api/documents', { method: 'POST', body: formData })
     const json = await res.json()
+    setUploading(false)
 
-    if (json.error) {
-      setUploadError('Ошибка: ' + json.error)
+    if (json.needs_manual_input) {
+      // PDF is image-based, show manual input form
+      setPendingFile(file)
+      setShowManual(true)
+      setStatus({type:'info', text:'PDF содержит только изображение. Введите данные вручную.'})
+    } else if (json.error) {
+      setStatus({type:'error', text:'Ошибка: ' + json.error})
     } else {
-      setUploadSuccess(`Готово! Извлечено ${json.parameters_count} показателей`)
+      setStatus({type:'success', text:`Готово! Извлечено ${json.parameters_count} показателей`})
       await loadAll(petId)
     }
-    setUploading(false)
     e.target.value = ''
+  }
+
+  async function submitManual() {
+    if (!petId || !manualText.trim()) return
+    setSubmittingManual(true)
+    const formData = new FormData()
+    formData.append('petId', petId)
+    formData.append('manual_text', manualText)
+    if (pendingFile) formData.append('file', pendingFile)
+
+    const res = await fetch('/api/documents', { method: 'POST', body: formData })
+    const json = await res.json()
+    setSubmittingManual(false)
+
+    if (json.error) {
+      setStatus({type:'error', text:'Ошибка: ' + json.error})
+    } else {
+      setStatus({type:'success', text:`Готово! Извлечено ${json.parameters_count} показателей`})
+      setShowManual(false)
+      setManualText('')
+      setPendingFile(null)
+      await loadAll(petId)
+    }
   }
 
   const categories = Array.from(new Set(labResults.map((r: any) => r.category)))
@@ -94,18 +126,48 @@ export default function DocumentsPage() {
         <h1 className="text-[20px] font-bold text-[#1C1C1E]">Документы</h1>
       </div>
 
-      {/* Upload button */}
-      <div className="px-3 mb-3">
-        <label className={cn('flex items-center justify-center gap-2 w-full rounded-[12px] py-3 text-[11px] font-bold cursor-pointer transition-all',
+      <div className="px-3 mb-2">
+        <label className={cn('flex items-center justify-center gap-2 w-full rounded-[12px] py-3 text-[11px] font-bold cursor-pointer',
           uploading ? 'bg-[#F2F2F7] text-[#8E8E93]' : 'bg-[#FD6220] text-white')}>
           <Upload size={14} />
-          {uploading ? 'AI читает документ...' : 'Загрузить PDF'}
+          {uploading ? 'Читаю PDF...' : 'Загрузить PDF'}
           <input type="file" accept="application/pdf" className="hidden" onChange={handleUpload} disabled={uploading} />
         </label>
-        {uploadError && <p className="text-[9px] text-red-500 mt-1.5 px-1">{uploadError}</p>}
-        {uploadSuccess && <p className="text-[9px] text-green-600 mt-1.5 px-1">✓ {uploadSuccess}</p>}
-        {uploading && <p className="text-[8px] text-[#8E8E93] mt-1 text-center">Это займёт 10–20 секунд</p>}
+        {status && (
+          <p className={cn('text-[9px] mt-1.5 px-1',
+            status.type === 'error' ? 'text-red-500' :
+            status.type === 'success' ? 'text-green-600' : 'text-[#FD6220] font-semibold')}>
+            {status.type === 'success' ? '✓ ' : status.type === 'info' ? 'ℹ ' : '✕ '}{status.text}
+          </p>
+        )}
       </div>
+
+      {/* Manual input form */}
+      {showManual && (
+        <div className="px-3 mb-3">
+          <div className="bg-white rounded-[13px] border border-[#FDD5C0] p-3">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] font-bold text-[#FD6220]">Введите данные вручную</p>
+              <button onClick={() => { setShowManual(false); setManualText('') }}>
+                <X size={14} className="text-[#8E8E93]" />
+              </button>
+            </div>
+            <p className="text-[8px] text-[#8E8E93] mb-2">
+              Перепишите показатели из документа. Например:
+              Фенобарбитал: 30 мкг/мл (норма 15-40)
+              Леветирацетам: 43.2 мкг/мл (норма 10-37)
+              Дата: 25.04.2026
+            </p>
+            <textarea value={manualText} onChange={e => setManualText(e.target.value)}
+              placeholder="Введите показатели из документа..." rows={5}
+              className="w-full border border-[#E5E5EA] rounded-[8px] p-2 text-[10px] font-medium resize-none outline-none focus:border-[#FD6220] mb-2" />
+            <button onClick={submitManual} disabled={!manualText.trim() || submittingManual}
+              className="w-full bg-[#FD6220] text-white font-bold rounded-[10px] py-2.5 text-[10px] disabled:opacity-50">
+              {submittingManual ? 'AI анализирует...' : 'Сохранить'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="px-3 mb-3">
@@ -131,7 +193,7 @@ export default function DocumentsPage() {
             <div className="text-center py-12 text-[#8E8E93]">
               <p className="text-4xl mb-3">📋</p>
               <p className="text-sm font-medium">Документов пока нет</p>
-              <p className="text-[10px] mt-1">Загрузи PDF с анализами или выписками</p>
+              <p className="text-[10px] mt-1">Загрузи PDF с анализами</p>
             </div>
           ) : (
             documents.map((doc: any) => (
@@ -155,7 +217,7 @@ export default function DocumentsPage() {
           <>
             {categories.length > 1 && (
               <div className="flex gap-1.5 overflow-x-auto pb-1">
-                {['all', ...categories].map((cat: any) => (
+                {(['all', ...categories] as string[]).map(cat => (
                   <button key={cat} onClick={() => setSelectedCategory(cat)}
                     className={cn('flex-shrink-0 text-[8px] font-bold px-2.5 py-1 rounded-full border',
                       selectedCategory === cat ? 'bg-[#FD6220] text-white border-[#FD6220]' : 'bg-white text-[#8E8E93] border-[#E5E5EA]')}>
@@ -168,7 +230,6 @@ export default function DocumentsPage() {
               <div className="text-center py-12 text-[#8E8E93]">
                 <p className="text-4xl mb-3">📊</p>
                 <p className="text-sm font-medium">Показателей пока нет</p>
-                <p className="text-[10px] mt-1">Загрузи PDF с анализами</p>
               </div>
             ) : (
               Object.entries(byParam).map(([key, values]) => {
@@ -186,8 +247,8 @@ export default function DocumentsPage() {
                     </div>
                     <div className="flex gap-4 overflow-x-auto">
                       {sorted.map((v: any, i: number) => (
-                        <div key={i} className="flex-shrink-0 text-center">
-                          <div className={cn('text-[12px] font-bold', v.is_abnormal ? 'text-red-500' : 'text-[#1C1C1E]')}>
+                        <div key={i} className="flex-shrink-0 text-center min-w-[40px]">
+                          <div className={cn('text-[13px] font-bold', v.is_abnormal ? 'text-red-500' : 'text-[#1C1C1E]')}>
                             {v.value ?? v.value_text ?? '—'}
                           </div>
                           <div className="text-[7px] text-[#8E8E93]">
