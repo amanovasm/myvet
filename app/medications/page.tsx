@@ -17,7 +17,6 @@ interface DoseStatus {
   doseUnit: string
   scheduledTime: string
   takenAt?: string
-  doseId?: string
 }
 
 export default function MedicationsPage() {
@@ -41,8 +40,6 @@ export default function MedicationsPage() {
 
   async function loadDoses(pid: string, date: string) {
     setLoading(true)
-
-    // Используем API route с service role key
     const res = await fetch(`/api/medications?petId=${pid}&date=${date}`)
     const { meds, schedules, taken } = await res.json()
 
@@ -51,7 +48,7 @@ export default function MedicationsPage() {
       const medSchedules = (schedules || []).filter((s: any) => s.medication_id === med.id)
       for (const sch of medSchedules) {
         const timeKey = sch.scheduled_time.slice(0, 5)
-        const existing = (taken || []).find((t: any) => t.schedule_id === sch.id && t.dose_date === date)
+        const existing = (taken || []).find((t: any) => t.schedule_id === sch.id)
         const item: DoseStatus = {
           scheduleId: sch.id,
           medId: med.id,
@@ -60,7 +57,6 @@ export default function MedicationsPage() {
           doseUnit: sch.dose_unit || med.dose_unit || 'мг',
           scheduledTime: timeKey,
           takenAt: existing?.taken_at,
-          doseId: existing?.id,
         }
         if (!grouped[timeKey]) grouped[timeKey] = []
         grouped[timeKey].push(item)
@@ -73,15 +69,23 @@ export default function MedicationsPage() {
   async function markDose(dose: DoseStatus) {
     if (!petId || dose.takenAt) return
     setMarking(dose.scheduleId)
-    await supabase.from('medication_doses').insert({
-      pet_id: petId,
-      medication_id: dose.medId,
-      schedule_id: dose.scheduleId,
-      dose_date: selectedDate,
-      scheduled_time: dose.scheduledTime,
-      taken_at: new Date().toISOString(),
+
+    const res = await fetch('/api/medications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        petId,
+        medicationId: dose.medId,
+        scheduleId: dose.scheduleId,
+        doseDate: selectedDate,
+        scheduledTime: dose.scheduledTime,
+      })
     })
-    await loadDoses(petId, selectedDate)
+
+    const json = await res.json()
+    if (json.ok) {
+      await loadDoses(petId, selectedDate)
+    }
     setMarking(null)
   }
 
@@ -141,7 +145,9 @@ export default function MedicationsPage() {
                       <div className="text-[10px] font-bold text-[#1C1C1E]">{dose.medName}</div>
                       <div className="text-[8px] text-[#8E8E93]">
                         {dose.doseAmount} {dose.doseUnit}
-                        {dose.takenAt ? ` · дано в ${format(new Date(dose.takenAt), 'HH:mm')}` : ' · ещё не отмечено'}
+                        {dose.takenAt
+                          ? ` · дано в ${format(new Date(dose.takenAt), 'HH:mm')}`
+                          : ' · ещё не отмечено'}
                       </div>
                     </div>
                     {dose.takenAt ? (
@@ -149,7 +155,9 @@ export default function MedicationsPage() {
                         <Check size={12} className="text-green-600" />
                       </div>
                     ) : (
-                      <button onClick={() => markDose(dose)} disabled={marking === dose.scheduleId}
+                      <button
+                        onClick={() => markDose(dose)}
+                        disabled={marking === dose.scheduleId}
                         className="w-6 h-6 rounded-full bg-[#E8F0FE] flex items-center justify-center flex-shrink-0 text-[#185FA5] font-bold text-lg disabled:opacity-50">
                         +
                       </button>
