@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     .from('medications')
     .select('*')
     .eq('pet_id', petId)
-    .is('ended_at', null)
+    .or('ended_at.is.null,ended_at.gte.' + new Date().toISOString().slice(0, 10))
 
   if (medsError) return NextResponse.json({ error: medsError.message }, { status: 500 })
 
