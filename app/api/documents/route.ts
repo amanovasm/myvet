@@ -31,63 +31,67 @@ export async function POST(req: NextRequest) {
     if (!petId || !file) return NextResponse.json({ error: 'missing params' }, { status: 400 })
 
     const arrayBuffer = await file.arrayBuffer()
-    const base64 = Buffer.from(arrayBuffer).toString('base64')
+    const buffer = Buffer.from(arrayBuffer)
+
+    // Extract text from PDF using pdf-parse
+    let pdfText = ''
+    try {
+      const pdfParse = (await import('pdf-parse')).default
+      const pdfData = await pdfParse(buffer)
+      pdfText = pdfData.text
+    } catch (e) {
+      console.error('PDF parse error:', e)
+      pdfText = `Файл: ${file.name}`
+    }
 
     // Upload to Supabase Storage
     const fileName = `${petId}/${Date.now()}_${file.name}`
     const { error: uploadError } = await supabase.storage
       .from('medical-docs')
-      .upload(fileName, arrayBuffer, { contentType: 'application/pdf' })
+      .upload(fileName, buffer, { contentType: 'application/pdf' })
     const fileUrl = uploadError ? null : fileName
 
-    // Send PDF to Claude
+    // Send extracted text to Claude Haiku
     const response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 2000,
       messages: [{
         role: 'user',
-        content: [
-          {
-            type: 'document' as any,
-            source: { type: 'base64', media_type: 'application/pdf', data: base64 }
-          },
-          {
-            type: 'text',
-            text: `Это лабораторный документ. Анализы могут быть сданы в человеческой лаборатории для животного — это нормально, извлекай данные в любом случае.
+        content: `Это текст из лабораторного документа. Анализы сданы в лаборатории для животного (кошки). Не важно что лаборатория человеческая — извлекай все данные.
 
-Верни ТОЛЬКО JSON без markdown и пояснений:
+ТЕКСТ ДОКУМЕНТА:
+${pdfText.slice(0, 6000)}
+
+Верни ТОЛЬКО JSON без markdown:
 {
   "document_type": "oac|biochemistry|urinalysis|ultrasound|discharge|phenobarbital|other",
   "document_date": "YYYY-MM-DD или null",
-  "title": "краткое название документа",
+  "title": "краткое название",
   "parameters": [
     {
       "parameter_name": "название показателя на русском",
-      "parameter_key": "klyuch_latinskimi_bukvami",
+      "parameter_key": "klyuch_latinskimi",
       "value": число или null,
-      "value_text": "текстовое значение если не число, иначе null",
-      "unit": "единица измерения или null",
+      "value_text": "текст если не число иначе null",
+      "unit": "единица или null",
       "ref_min": число или null,
       "ref_max": число или null,
-      "is_abnormal": true если выходит за референсные значения иначе false
+      "is_abnormal": true если вне нормы иначе false
     }
   ]
 }
-Типы: oac=общий анализ крови, biochemistry=биохимия, urinalysis=анализ мочи, ultrasound=УЗИ, discharge=выписка врача, phenobarbital=уровень противосудорожных препаратов, other=прочее.
-Извлекай ВСЕ числовые показатели из документа. Не пропускай ни один.`
-          }
-        ]
+Типы: oac=ОАК, biochemistry=биохимия, urinalysis=анализ мочи, ultrasound=УЗИ, discharge=выписка, phenobarbital=уровень противосудорожных препаратов, other=прочее.
+Извлеки ВСЕ числовые показатели.`
       }]
     })
 
     const rawText = response.content[0].type === 'text' ? response.content[0].text : '{}'
-    
+
     let parsed: any = {}
     try {
       const clean = rawText.replace(/```json\n?|\n?```/g, '').trim()
       parsed = JSON.parse(clean)
-    } catch (parseErr) {
-      console.error('JSON parse error:', parseErr, 'raw:', rawText.slice(0, 500))
+    } catch {
       parsed = { document_type: 'other', document_date: null, title: file.name, parameters: [] }
     }
 
@@ -101,46 +105,38 @@ export async function POST(req: NextRequest) {
         document_date: docDate,
         title: parsed.title || file.name,
         file_url: fileUrl,
-        raw_text: rawText.slice(0, 5000),
+        raw_text: pdfText.slice(0, 5000),
       })
       .select().single()
 
-    if (docError) return NextResponse.json({ error: 'doc insert: ' + docError.message }, { status: 500 })
+    if (docError) return NextResponse.json({ error: docError.message }, { status: 500 })
 
     let parametersInserted = 0
-
     if (parsed.parameters?.length > 0) {
-      // Insert one by one to catch individual errors
       for (const p of parsed.parameters) {
         if (!p.parameter_name || !p.parameter_key) continue
-        
-        const row = {
+        const { error: labError } = await supabase.from('lab_results').insert({
           pet_id: petId,
           document_id: doc.id,
           document_date: docDate,
           category: parsed.document_type || 'other',
           parameter_name: String(p.parameter_name),
           parameter_key: String(p.parameter_key),
-          value: (p.value !== null && p.value !== undefined && !isNaN(Number(p.value))) ? Number(p.value) : null,
+          value: (p.value !== null && !isNaN(Number(p.value))) ? Number(p.value) : null,
           value_text: p.value_text ? String(p.value_text) : null,
           unit: p.unit ? String(p.unit) : null,
-          ref_min: (p.ref_min !== null && p.ref_min !== undefined && !isNaN(Number(p.ref_min))) ? Number(p.ref_min) : null,
-          ref_max: (p.ref_max !== null && p.ref_max !== undefined && !isNaN(Number(p.ref_max))) ? Number(p.ref_max) : null,
+          ref_min: (p.ref_min !== null && !isNaN(Number(p.ref_min))) ? Number(p.ref_min) : null,
+          ref_max: (p.ref_max !== null && !isNaN(Number(p.ref_max))) ? Number(p.ref_max) : null,
           is_abnormal: Boolean(p.is_abnormal),
-        }
-
-        const { error: labError } = await supabase.from('lab_results').insert(row)
-        if (labError) {
-          console.error('Lab insert error:', labError.message, 'row:', JSON.stringify(row))
-        } else {
-          parametersInserted++
-        }
+        })
+        if (!labError) parametersInserted++
+        else console.error('Lab insert error:', labError.message)
       }
     }
 
     return NextResponse.json({ document: doc, parameters_count: parametersInserted })
   } catch (e: any) {
-    console.error('Document upload error:', e)
+    console.error('Document error:', e)
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }
