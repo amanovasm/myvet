@@ -13,7 +13,6 @@ export async function POST(req: NextRequest) {
 
     if (!petId) return NextResponse.json({ error: 'petId required' }, { status: 400 })
 
-    // Считаем события за этот день для порядкового номера
     const { count } = await supabase
       .from('health_events')
       .select('*', { count: 'exact', head: true })
@@ -30,14 +29,20 @@ export async function POST(req: NextRequest) {
       .select()
       .single()
 
-    if (error) {
-      console.error('Event insert error:', error)
-      return NextResponse.json({ error: error.message, details: error }, { status: 500 })
-    }
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    // Автоматически обновляем дайджест в фоне после события
+    try {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://myvet-app.vercel.app'
+      fetch(`${appUrl}/api/digest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ petId }),
+      }).catch(() => {})
+    } catch {}
 
     return NextResponse.json({ event: data, identifier })
   } catch (e: any) {
-    console.error('Event route error:', e)
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }

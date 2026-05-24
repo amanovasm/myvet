@@ -66,17 +66,23 @@ export default function Dashboard() {
   }, [loadData])
 
   async function generateDigest() {
-    if (!pet) return
+    if (!pet || generatingDigest) return
     setGeneratingDigest(true)
     try {
-      await fetch('/api/digest', {
+      const res = await fetch('/api/digest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ petId: pet.id }),
       })
-      const { data } = await supabase.from('ai_digests').select('*').eq('pet_id', pet.id).order('created_at', { ascending: false }).limit(1)
-      if (data && data.length > 0) setDigest(data[0])
-    } catch {}
+      const json = await res.json()
+      if (json.content) {
+        // Reload from DB to get the saved digest with id
+        const { data } = await supabase.from('ai_digests').select('*').eq('pet_id', pet.id).order('created_at', { ascending: false }).limit(1)
+        if (data && data.length > 0) setDigest(data[0])
+      }
+    } catch (e) {
+      console.error('Digest error:', e)
+    }
     setGeneratingDigest(false)
   }
 
