@@ -77,7 +77,7 @@ export default function DocumentsPage() {
     e.target.value = ''
   }
 
-  const categories = [...new Set(labResults.map((r: any) => r.category))]
+  const categories = Array.from(new Set(labResults.map((r: any) => r.category)))
   const filteredResults = selectedCategory === 'all' ? labResults : labResults.filter((r: any) => r.category === selectedCategory)
   const byParam: Record<string, any[]> = {}
   filteredResults.forEach((r: any) => {
