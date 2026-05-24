@@ -53,36 +53,37 @@ export async function POST(req: NextRequest) {
           },
           {
             type: 'text',
-            text: `Это медицинский документ для кошки. Извлеки данные и верни ТОЛЬКО JSON без markdown:
+            text: `Это медицинский документ для кошки. Извлеки данные и верни ТОЛЬКО JSON без markdown и пояснений:
 {
   "document_type": "oac|biochemistry|urinalysis|ultrasound|discharge|phenobarbital|other",
   "document_date": "YYYY-MM-DD или null",
-  "title": "краткое название документа",
+  "title": "краткое название",
   "parameters": [
     {
-      "parameter_name": "название показателя на русском",
-      "parameter_key": "klyuch_latinitsey",
+      "parameter_name": "название на русском",
+      "parameter_key": "klyuch_latin",
       "value": число или null,
-      "value_text": "текст если не число или null",
+      "value_text": null,
       "unit": "единица или null",
       "ref_min": число или null,
       "ref_max": число или null,
-      "is_abnormal": true или false
+      "is_abnormal": false
     }
   ]
-}
-Типы: oac=ОАК, biochemistry=биохимия, urinalysis=анализ мочи, ultrasound=УЗИ, discharge=выписка, phenobarbital=фенобарбитал/леветирацетам.`
+}`
           }
         ]
       }]
     })
 
     const rawText = response.content[0].type === 'text' ? response.content[0].text : '{}'
+    
     let parsed: any = {}
     try {
       const clean = rawText.replace(/```json\n?|\n?```/g, '').trim()
       parsed = JSON.parse(clean)
-    } catch {
+    } catch (parseErr) {
+      console.error('JSON parse error:', parseErr, 'raw:', rawText.slice(0, 500))
       parsed = { document_type: 'other', document_date: null, title: file.name, parameters: [] }
     }
 
@@ -100,29 +101,40 @@ export async function POST(req: NextRequest) {
       })
       .select().single()
 
-    if (docError) return NextResponse.json({ error: docError.message }, { status: 500 })
+    if (docError) return NextResponse.json({ error: 'doc insert: ' + docError.message }, { status: 500 })
+
+    let parametersInserted = 0
 
     if (parsed.parameters?.length > 0) {
-      const labRows = parsed.parameters
-        .filter((p: any) => p.parameter_name && p.parameter_key)
-        .map((p: any) => ({
+      // Insert one by one to catch individual errors
+      for (const p of parsed.parameters) {
+        if (!p.parameter_name || !p.parameter_key) continue
+        
+        const row = {
           pet_id: petId,
           document_id: doc.id,
           document_date: docDate,
           category: parsed.document_type || 'other',
-          parameter_name: p.parameter_name,
-          parameter_key: p.parameter_key,
-          value: typeof p.value === 'number' ? p.value : null,
-          value_text: p.value_text ?? null,
-          unit: p.unit ?? null,
-          ref_min: typeof p.ref_min === 'number' ? p.ref_min : null,
-          ref_max: typeof p.ref_max === 'number' ? p.ref_max : null,
-          is_abnormal: p.is_abnormal ?? false,
-        }))
-      await supabase.from('lab_results').insert(labRows)
+          parameter_name: String(p.parameter_name),
+          parameter_key: String(p.parameter_key),
+          value: (p.value !== null && p.value !== undefined && !isNaN(Number(p.value))) ? Number(p.value) : null,
+          value_text: p.value_text ? String(p.value_text) : null,
+          unit: p.unit ? String(p.unit) : null,
+          ref_min: (p.ref_min !== null && p.ref_min !== undefined && !isNaN(Number(p.ref_min))) ? Number(p.ref_min) : null,
+          ref_max: (p.ref_max !== null && p.ref_max !== undefined && !isNaN(Number(p.ref_max))) ? Number(p.ref_max) : null,
+          is_abnormal: Boolean(p.is_abnormal),
+        }
+
+        const { error: labError } = await supabase.from('lab_results').insert(row)
+        if (labError) {
+          console.error('Lab insert error:', labError.message, 'row:', JSON.stringify(row))
+        } else {
+          parametersInserted++
+        }
+      }
     }
 
-    return NextResponse.json({ document: doc, parameters_count: parsed.parameters?.length || 0 })
+    return NextResponse.json({ document: doc, parameters_count: parametersInserted })
   } catch (e: any) {
     console.error('Document upload error:', e)
     return NextResponse.json({ error: e.message }, { status: 500 })
