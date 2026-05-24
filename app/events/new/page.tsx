@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { cn, EVENT_TYPES, generateEventId } from '@/lib/utils'
+import { cn, EVENT_TYPES } from '@/lib/utils'
 import { format } from 'date-fns'
 import { Check, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -25,7 +25,8 @@ export default function NewEventPage() {
   const [petId, setPetId] = useState<string | null>(null)
   const [petName, setPetName] = useState('PET')
   const [saving, setSaving] = useState(false)
-  const [savedId, setSavedId] = useState('')
+  const [savedIdentifier, setSavedIdentifier] = useState('')
+  const [saveError, setSaveError] = useState('')
 
   const [eventType, setEventType] = useState('')
   const [customName, setCustomName] = useState('')
@@ -54,77 +55,73 @@ export default function NewEventPage() {
   async function save() {
     if (!petId) return
     setSaving(true)
+    setSaveError('')
 
     const occurred_at = new Date(`${date}T${time}`).toISOString()
-    const durationSecs = isSeizure ? (durationMin * 60 + durationSec) || null : null
-
-    const { count } = await supabase.from('health_events')
-      .select('*', { count: 'exact', head: true })
-      .eq('pet_id', petId)
-      .gte('occurred_at', `${date}T00:00:00`)
-
-    const seq = (count || 0) + 1
-    const id = generateEventId(petName, new Date(date), seq)
-
     const finalType = isOther ? customName : eventType
     const finalDir: 'negative' | 'neutral' | 'positive' = isOther
       ? direction
       : ((selectedType?.direction as 'negative' | 'neutral' | 'positive') || 'neutral')
 
-    let hadAura: boolean | null = null
+    let had_aura: boolean | null = null
     if (isSeizure) {
-      if (aura === 'yes') hadAura = true
-      else if (aura === 'no') hadAura = false
-      else hadAura = null
+      if (aura === 'yes') had_aura = true
+      else if (aura === 'no') had_aura = false
     }
 
-    await supabase.from('health_events').insert({
-      pet_id: petId,
-      identifier: id,
-      event_type: finalType,
-      direction: finalDir,
-      occurred_at,
-      duration_sec: durationSecs,
-      had_aura: hadAura,
-      observations_before: obsBefore || null,
-      description: description || null,
-      post_ictal_type: isSeizure && postIctalType ? postIctalType : null,
-      post_ictal_notes: isSeizure && postIctalType === 'atypical' ? postIctalNotes || null : null,
-      observations_after: obsAfter || null,
+    const res = await fetch('/api/event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        petId,
+        petName,
+        date,
+        event_type: finalType,
+        direction: finalDir,
+        occurred_at,
+        duration_sec: isSeizure ? (durationMin * 60 + durationSec) || null : null,
+        had_aura,
+        observations_before: obsBefore || null,
+        description: description || null,
+        post_ictal_type: isSeizure && postIctalType ? postIctalType : null,
+        post_ictal_notes: isSeizure && postIctalType === 'atypical' ? postIctalNotes || null : null,
+        observations_after: obsAfter || null,
+      })
     })
 
-    setSavedId(id)
+    const json = await res.json()
     setSaving(false)
+
+    if (json.error) {
+      setSaveError(`Ошибка: ${json.error}`)
+    } else {
+      setSavedIdentifier(json.identifier)
+    }
   }
 
-  // Показываем success экран
-  if (savedId) return (
+  if (savedIdentifier) return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-[#F2F2F7] p-6">
       <div className="w-16 h-16 rounded-full bg-[#FD6220] flex items-center justify-center">
         <Check size={30} className="text-white" />
       </div>
       <p className="font-bold text-[18px] text-[#1C1C1E] text-center">Событие сохранено!</p>
-      <div className="bg-white rounded-[13px] border border-[#E5E5EA] p-3 w-full">
+      <div className="bg-white rounded-[13px] border border-[#E5E5EA] p-4 w-full">
         <p className="text-[8px] font-bold text-[#8E8E93] uppercase tracking-wide mb-1">Идентификатор</p>
-        <p className="text-[13px] font-bold text-[#FD6220] font-mono">{savedId}</p>
-        <p className="text-[8px] text-[#8E8E93] mt-1">Используй для поиска видео в Google Drive</p>
+        <p className="text-[14px] font-bold text-[#FD6220] font-mono">{savedIdentifier}</p>
+        <p className="text-[9px] text-[#8E8E93] mt-1">Используй для поиска видео в Google Drive</p>
       </div>
-      <button
-        onClick={() => router.push('/events?refresh=' + Date.now())}
+      <button onClick={() => router.push('/events')}
         className="w-full bg-[#FD6220] text-white font-bold rounded-[12px] py-3 text-[12px]">
         Перейти к событиям
       </button>
     </div>
   )
 
-  const TapBtn = ({ val, label, current, onSelect }: {
-    val: string; label: string; current: string; onSelect: (v: string) => void
-  }) => (
+  const TapBtn = ({ val, label, current, onSelect }: { val: string; label: string; current: string; onSelect: (v: string) => void }) => (
     <button onClick={() => onSelect(val)}
       className={cn('rounded-[8px] py-2 px-1 text-center border-[1.5px] cursor-pointer',
         current === val ? 'border-[#FD6220] bg-[#FFF4EF]' : 'border-[#E5E5EA] bg-white')}>
-      <span className={cn('text-[8px] font-semibold block',
-        current === val ? 'text-[#FD6220]' : 'text-[#8E8E93]')}>{label}</span>
+      <span className={cn('text-[8px] font-semibold block', current === val ? 'text-[#FD6220]' : 'text-[#8E8E93]')}>{label}</span>
     </button>
   )
 
@@ -183,9 +180,8 @@ export default function NewEventPage() {
             </div>
             {isOther && (
               <div className="card">
-                <p className="text-[10px] font-bold text-[#1C1C1E] mb-2">Название события</p>
-                <input value={customName} onChange={e => setCustomName(e.target.value)}
-                  placeholder="Опиши событие..."
+                <p className="text-[10px] font-bold text-[#1C1C1E] mb-2">Название</p>
+                <input value={customName} onChange={e => setCustomName(e.target.value)} placeholder="Опиши событие..."
                   className="w-full border-[1.5px] border-[#FD6220] bg-[#FFF4EF] rounded-[8px] p-2.5 text-[11px] font-semibold outline-none mb-3" />
                 <p className="text-[10px] font-bold text-[#1C1C1E] mb-2">Направление</p>
                 <div className="grid grid-cols-3 gap-1.5">
@@ -200,9 +196,7 @@ export default function NewEventPage() {
               </div>
             )}
             <button onClick={() => setStep(1)} disabled={!eventType || (isOther && !customName)}
-              className="bg-[#FD6220] text-white font-bold rounded-[10px] py-2.5 text-[10px] w-full disabled:opacity-50">
-              Далее →
-            </button>
+              className="bg-[#FD6220] text-white font-bold rounded-[10px] py-2.5 text-[10px] w-full disabled:opacity-50">Далее →</button>
           </>
         )}
 
@@ -229,7 +223,7 @@ export default function NewEventPage() {
                   <p className="text-[10px] font-bold text-[#1C1C1E] mb-2">Длительность</p>
                   <div className="grid grid-cols-2 gap-3">
                     {[{ label: 'Минуты', val: durationMin, set: setDurationMin, step: 1, max: 60 },
-                      { label: 'Секунды', val: durationSec, set: setDurationSec, step: 5, max: 59 }].map(f => (
+                      { label: 'Секунды', val: durationSec, set: setDurationSec, step: 5, max: 55 }].map(f => (
                       <div key={f.label}>
                         <p className="text-[7px] font-bold text-[#8E8E93] uppercase mb-1">{f.label}</p>
                         <div className="flex items-center justify-center gap-2 border border-[#E5E5EA] rounded-[8px] py-2">
@@ -254,8 +248,7 @@ export default function NewEventPage() {
             )}
             <div className="card">
               <p className="text-[10px] font-bold text-[#1C1C1E] mb-2">Наблюдения до события</p>
-              <textarea value={obsBefore} onChange={e => setObsBefore(e.target.value)}
-                placeholder="Что предшествовало..." rows={3}
+              <textarea value={obsBefore} onChange={e => setObsBefore(e.target.value)} placeholder="Что предшествовало..." rows={3}
                 className="w-full border border-[#E5E5EA] rounded-[8px] p-2 text-[10px] font-medium resize-none outline-none focus:border-[#FD6220]" />
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -269,8 +262,7 @@ export default function NewEventPage() {
           <>
             <div className="card">
               <p className="text-[10px] font-bold text-[#1C1C1E] mb-2">Описание события</p>
-              <textarea value={description} onChange={e => setDescription(e.target.value)}
-                placeholder="Как проходило, что наблюдала..." rows={3}
+              <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Как проходило, что наблюдала..." rows={3}
                 className="w-full border border-[#E5E5EA] rounded-[8px] p-2 text-[10px] font-medium resize-none outline-none focus:border-[#FD6220]" />
             </div>
             {isSeizure && (
@@ -282,18 +274,21 @@ export default function NewEventPage() {
                   <TapBtn val="atypical" label="Нетипичная" current={postIctalType} onSelect={setPostIctalType} />
                 </div>
                 {postIctalType === 'atypical' && (
-                  <textarea value={postIctalNotes} onChange={e => setPostIctalNotes(e.target.value)}
-                    placeholder="Дезориентация, агрессия, слепота..." rows={2}
+                  <textarea value={postIctalNotes} onChange={e => setPostIctalNotes(e.target.value)} placeholder="Дезориентация, агрессия..." rows={2}
                     className="w-full border border-[#FDD5C0] rounded-[8px] p-2 text-[10px] font-medium resize-none outline-none bg-white" />
                 )}
               </div>
             )}
             <div className="card">
               <p className="text-[10px] font-bold text-[#1C1C1E] mb-2">Наблюдения после события</p>
-              <textarea value={obsAfter} onChange={e => setObsAfter(e.target.value)}
-                placeholder="Что происходило после..." rows={3}
+              <textarea value={obsAfter} onChange={e => setObsAfter(e.target.value)} placeholder="Что происходило после..." rows={3}
                 className="w-full border border-[#E5E5EA] rounded-[8px] p-2 text-[10px] font-medium resize-none outline-none focus:border-[#FD6220]" />
             </div>
+            {saveError && (
+              <div className="bg-red-50 border border-red-200 rounded-[13px] p-3">
+                <p className="text-[9px] font-bold text-red-500">{saveError}</p>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <button onClick={() => setStep(1)} className="bg-[#F2F2F7] text-[#8E8E93] font-bold rounded-[10px] py-2.5 text-[10px]">← Назад</button>
               <button onClick={save} disabled={saving}
