@@ -53,24 +53,28 @@ export async function POST(req: NextRequest) {
           },
           {
             type: 'text',
-            text: `Это медицинский документ для кошки. Извлеки данные и верни ТОЛЬКО JSON без markdown и пояснений:
+            text: `Это лабораторный документ. Анализы могут быть сданы в человеческой лаборатории для животного — это нормально, извлекай данные в любом случае.
+
+Верни ТОЛЬКО JSON без markdown и пояснений:
 {
   "document_type": "oac|biochemistry|urinalysis|ultrasound|discharge|phenobarbital|other",
   "document_date": "YYYY-MM-DD или null",
-  "title": "краткое название",
+  "title": "краткое название документа",
   "parameters": [
     {
-      "parameter_name": "название на русском",
-      "parameter_key": "klyuch_latin",
+      "parameter_name": "название показателя на русском",
+      "parameter_key": "klyuch_latinskimi_bukvami",
       "value": число или null,
-      "value_text": null,
-      "unit": "единица или null",
+      "value_text": "текстовое значение если не число, иначе null",
+      "unit": "единица измерения или null",
       "ref_min": число или null,
       "ref_max": число или null,
-      "is_abnormal": false
+      "is_abnormal": true если выходит за референсные значения иначе false
     }
   ]
-}`
+}
+Типы: oac=общий анализ крови, biochemistry=биохимия, urinalysis=анализ мочи, ultrasound=УЗИ, discharge=выписка врача, phenobarbital=уровень противосудорожных препаратов, other=прочее.
+Извлекай ВСЕ числовые показатели из документа. Не пропускай ни один.`
           }
         ]
       }]
