@@ -2,25 +2,31 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 export async function GET() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  const service = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  const sb = createClient(url, anon)
 
-  // Пробуем оба клиента
-  const sbAnon = createClient(url!, anon!)
-  const sbService = createClient(url!, service || anon!)
+  // Тестовый INSERT
+  const { data: inserted, error: insertError } = await sb
+    .from('health_events')
+    .insert({
+      pet_id: '3eea3d93-d05d-4e87-8baf-4c7122680217',
+      identifier: 'DEBUG-2026-05-24-999',
+      event_type: 'test_debug',
+      direction: 'neutral',
+      occurred_at: new Date().toISOString(),
+    })
+    .select()
+    .single()
 
-  const [evAnon, evService, checkinAnon] = await Promise.all([
-    sbAnon.from('health_events').select('id,event_type,occurred_at').limit(5),
-    sbService.from('health_events').select('id,event_type,occurred_at').limit(5),
-    sbAnon.from('daily_checkins').select('id,date,appetite').limit(5),
-  ])
+  const { data: allEvents } = await sb
+    .from('health_events').select('id,event_type,identifier').limit(10)
 
   return NextResponse.json({
-    supabase_url: url,
-    has_service_key: !!service,
-    events_anon: { data: evAnon.data, error: evAnon.error?.message },
-    events_service: { data: evService.data, error: evService.error?.message },
-    checkins_anon: { data: checkinAnon.data, error: checkinAnon.error?.message },
+    insert_result: inserted,
+    insert_error: insertError?.message,
+    insert_error_details: insertError?.details,
+    insert_error_hint: insertError?.hint,
+    all_events: allEvents,
   })
 }
