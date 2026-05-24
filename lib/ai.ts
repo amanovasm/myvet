@@ -5,6 +5,21 @@ import { ru } from 'date-fns/locale'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
+const EVENT_LABELS: Record<string, string> = {
+  seizure: 'Приступ', head_pressing: 'Хедпрессинг', food_refusal: 'Отказ от еды',
+  loaf_position: 'Буханка', no_urine_24h: 'Нет мочи 24ч+', no_stool_48h: 'Нет стула 48ч+',
+  vomiting: 'Рвота', strange_behavior: 'Странное поведение', claw_sharpening: 'Точение когтей',
+  meowing: 'Мяуканье', chirping: 'Чириканье', active_play: 'Активные игры',
+}
+const evLabel = (key: string) => EVENT_LABELS[key] || key
+
+const POST_ICTAL: Record<string, string> = {
+  standard: 'Стандартная (поела)', atypical: 'Нетипичная',
+}
+
+const doseStr = (m: any) =>
+  m.dose_amount ? `${m.dose_amount}${m.dose_unit || 'мг'}` : 'доза не указана'
+
 export async function generateWeeklyDigest(petId: string): Promise<string> {
   const today = new Date()
   const weekAgo = subDays(today, 7)
@@ -22,13 +37,13 @@ export async function generateWeeklyDigest(petId: string): Promise<string> {
   ).join('\n') || 'нет данных'
 
   const eventsText = (events || []).map(e =>
-    `${format(new Date(e.occurred_at), 'dd.MM HH:mm')}: ${e.event_type}${e.duration_sec ? ` ${Math.round(e.duration_sec / 60)}мин` : ''}${e.description ? ` — ${e.description}` : ''}`
+    `${format(new Date(e.occurred_at), 'dd.MM HH:mm')}: ${evLabel(e.event_type)}${e.duration_sec ? ` ${Math.round(e.duration_sec / 60)}мин` : ''}${e.description ? ` — ${e.description}` : ''}`
   ).join('\n') || 'событий не было'
 
-  const medsText = (meds || []).map(m => `${m.name} ${m.dose_amount}${m.dose_unit}`).join(', ') || 'нет данных'
+  const medsText = (meds || []).map(m => `${m.name} ${doseStr(m)}`).join(', ') || 'нет данных'
 
   const historyText = (history || []).map(e =>
-    `${format(new Date(e.occurred_at), 'dd.MM.yyyy')}: ${e.event_type}${e.description ? ` — ${e.description.slice(0, 80)}` : ''}`
+    `${format(new Date(e.occurred_at), 'dd.MM.yyyy')}: ${evLabel(e.event_type)}${e.description ? ` — ${e.description.slice(0, 80)}` : ''}`
   ).join('\n') || 'нет истории'
 
   const response = await anthropic.messages.create({
@@ -36,7 +51,7 @@ export async function generateWeeklyDigest(petId: string): Promise<string> {
     max_tokens: 600,
     messages: [{
       role: 'user',
-      content: `Ты — ассистент для анализа здоровья животного. Твоя роль: находить паттерны в данных и показывать их владельцу языком истории животного. Ты не ставишь диагнозы. Ты говоришь: «в похожей ситуации раньше происходило вот это».
+      content: `Ты ассистент для анализа здоровья животного. Находишь паттерны и говоришь языком истории животного. Не ставишь диагнозы.
 
 ЖИВОТНОЕ: ${pet?.name}, ${pet?.species === 'cat' ? 'кошка' : 'собака'}
 ДИАГНОЗЫ: ${pet?.diagnoses || 'не указаны'}
@@ -51,12 +66,12 @@ ${eventsText}
 ИСТОРИЯ (для паттернов):
 ${historyText}
 
-Напиши дайджест. Структура:
+Напиши дайджест:
 1. Как прошла неделя (2-3 предложения)
-2. Паттерны — что повторяется? Если есть похожие ситуации в истории — обязательно упомяни: «В похожей ситуации [дата] произошло...»
-3. На что обратить внимание (не рекомендация — наблюдение)
+2. Паттерны — если есть похожие ситуации в истории: «В похожей ситуации [дата] произошло...»
+3. На что обратить внимание (наблюдение, не рекомендация)
 
-Тон: спокойный, нейтральный. Пиши на русском. Максимум 200 слов.`
+Тон: спокойный. Пиши на русском. Максимум 200 слов.`
     }],
   })
 
@@ -87,58 +102,84 @@ export async function generateVetReport(petId: string, days = 90): Promise<strin
   const seizures = (events || []).filter(e => e.event_type === 'seizure')
   const activeMeds = (meds || []).filter(m => !m.ended_at)
 
-  const EVENT_LABELS: Record<string, string> = {
-    seizure: 'Приступ', head_pressing: 'Хедпрессинг', food_refusal: 'Отказ от еды',
-    loaf_position: 'Буханка', no_urine_24h: 'Нет мочи 24ч+', no_stool_48h: 'Нет стула 48ч+',
-    vomiting: 'Рвота', strange_behavior: 'Странное поведение', claw_sharpening: 'Точение когтей',
-    meowing: 'Мяуканье', chirping: 'Чириканье', active_play: 'Активные игры',
+  const lines: string[] = [
+    'ОТЧЁТ ДЛЯ ВЕТЕРИНАРА',
+    `Сформирован: ${format(today, 'd MMMM yyyy', { locale: ru })}`,
+    `Период: ${format(from, 'd MMMM yyyy', { locale: ru })} — ${format(today, 'd MMMM yyyy', { locale: ru })}`,
+    '',
+    '━━━━━━━━━━━━━━━━━━━━━',
+    'ЖИВОТНОЕ',
+    '━━━━━━━━━━━━━━━━━━━━━',
+    `Имя: ${pet?.name}`,
+    `Вид: ${pet?.species === 'cat' ? 'Кошка' : 'Собака'}${pet?.breed ? ` · ${pet.breed}` : ''}`,
+    `Диагнозы: ${pet?.diagnoses || 'не указаны'}`,
+    `Противопоказания: ${pet?.allergies || 'нет'}`,
+    '',
+    '━━━━━━━━━━━━━━━━━━━━━',
+    'ВЕС',
+    '━━━━━━━━━━━━━━━━━━━━━',
+    (weights || []).length > 0
+      ? (weights || []).map(w => `${w.measured_at}: ${w.weight_kg} кг`).join('\n')
+      : 'нет данных',
+    '',
+    '━━━━━━━━━━━━━━━━━━━━━',
+    'ТЕКУЩАЯ СХЕМА ЛЕЧЕНИЯ',
+    '━━━━━━━━━━━━━━━━━━━━━',
+    activeMeds.length > 0
+      ? activeMeds.map(m => `• ${m.name} — ${doseStr(m)} (с ${m.started_at})`).join('\n')
+      : 'нет данных',
+    '',
+    '━━━━━━━━━━━━━━━━━━━━━',
+    'ИЗМЕНЕНИЯ В СХЕМЕ',
+    '━━━━━━━━━━━━━━━━━━━━━',
+  ]
+
+  const medsChanged = (meds || []).filter(m => m.started_at >= format(from, 'yyyy-MM-dd'))
+  if (medsChanged.length > 0) {
+    medsChanged.forEach(m => {
+      lines.push(`${m.started_at}: ${m.name} ${doseStr(m)}${m.change_note ? ` — ${m.change_note}` : ''}`)
+    })
+  } else {
+    lines.push('изменений не было')
   }
-  const evLabel = (key: string) => EVENT_LABELS[key] || key
-  const POST_ICTAL: Record<string, string> = { standard: 'Стандартная (поела)', atypical: 'Нетипичная' }
-  const doseStr = (m: any) => m.dose_amount ? `${m.dose_amount}${m.dose_unit || 'мг'}` : 'доза не указана'
 
-  return `ОТЧЁТ ДЛЯ ВЕТЕРИНАРА
-Сформирован: ${format(today, 'd MMMM yyyy', { locale: ru })}
-Период: ${format(from, 'd MMMM yyyy', { locale: ru })} — ${format(today, 'd MMMM yyyy', { locale: ru })}
+  lines.push('', `━━━━━━━━━━━━━━━━━━━━━`, `ПРИСТУПЫ (${seizures.length})`, '━━━━━━━━━━━━━━━━━━━━━')
 
-━━━━━━━━━━━━━━━━━━━━━
-ЖИВОТНОЕ
-━━━━━━━━━━━━━━━━━━━━━
-Имя: ${pet?.name}
-Вид: ${pet?.species === 'cat' ? 'Кошка' : 'Собака'}${pet?.breed ? ` · ${pet.breed}` : ''}
-Диагнозы: ${pet?.diagnoses || 'не указаны'}
-Противопоказания: ${pet?.allergies || 'нет'}
+  if (seizures.length > 0) {
+    seizures.forEach(e => {
+      let line = `${format(new Date(e.occurred_at), 'dd.MM.yyyy HH:mm')} [${e.identifier}]`
+      if (e.duration_sec) line += ` · ${Math.round(e.duration_sec / 60)} мин`
+      if (e.had_aura === true) line += ' · с аурой'
+      if (e.had_aura === false) line += ' · без ауры'
+      lines.push(line)
+      if (e.description) lines.push(`  ${e.description}`)
+      if (e.post_ictal_type) {
+        const piLabel = POST_ICTAL[e.post_ictal_type] || e.post_ictal_type
+        lines.push(`  Постиктал: ${piLabel}${e.post_ictal_notes ? ` — ${e.post_ictal_notes}` : ''}`)
+      }
+    })
+  } else {
+    lines.push('приступов не зафиксировано')
+  }
 
-━━━━━━━━━━━━━━━━━━━━━
-ВЕС
-━━━━━━━━━━━━━━━━━━━━━
-${(weights || []).map(w => `${w.measured_at}: ${w.weight_kg} кг`).join('\n') || 'нет данных'}
+  lines.push('', '━━━━━━━━━━━━━━━━━━━━━', 'ДРУГИЕ СОБЫТИЯ', '━━━━━━━━━━━━━━━━━━━━━')
 
-━━━━━━━━━━━━━━━━━━━━━
-ТЕКУЩАЯ СХЕМА ЛЕЧЕНИЯ
-━━━━━━━━━━━━━━━━━━━━━
-${activeMeds.map(m => `• ${m.name} — ${doseStr(m)} (с ${m.started_at})`).join('\n') || 'нет данных'}
+  const otherEvents = (events || []).filter(e => e.event_type !== 'seizure' && !e.event_type.startsWith('test_'))
+  if (otherEvents.length > 0) {
+    otherEvents.forEach(e => {
+      lines.push(`${format(new Date(e.occurred_at), 'dd.MM.yyyy')}: ${evLabel(e.event_type)}${e.description ? ` — ${e.description}` : ''}`)
+    })
+  } else {
+    lines.push('других событий нет')
+  }
 
-━━━━━━━━━━━━━━━━━━━━━
-ИЗМЕНЕНИЯ В СХЕМЕ
-━━━━━━━━━━━━━━━━━━━━━
-${(meds || []).filter(m => m.started_at >= format(from, 'yyyy-MM-dd')).map(m => `${m.started_at}: ${m.name} ${doseStr(m)}${m.change_note ? \` — \${m.change_note}\` : ''}`).join('\n') || 'изменений не было'}
+  lines.push(
+    '', '━━━━━━━━━━━━━━━━━━━━━', 'ДИНАМИКА', '━━━━━━━━━━━━━━━━━━━━━',
+    `Дней с чек-инами: ${(checkins || []).length} из ${days}`,
+    `Заметки для врача: ${pet?.vet_notes || 'нет'}`,
+    '',
+    'Отчёт сформирован приложением myvet.kz'
+  )
 
-━━━━━━━━━━━━━━━━━━━━━
-ПРИСТУПЫ (${seizures.length})
-━━━━━━━━━━━━━━━━━━━━━
-${seizures.map(e => `${format(new Date(e.occurred_at), 'dd.MM.yyyy HH:mm')} [${e.identifier}]${e.duration_sec ? ` · ${Math.round(e.duration_sec / 60)} мин` : ''}${e.had_aura ? ' · с аурой' : ''}${e.description ? `\n  ${e.description}` : ''}${e.post_ictal_type ? `\n  Постиктал: ${POST_ICTAL[e.post_ictal_type] || e.post_ictal_type}${e.post_ictal_notes ? \` — \${e.post_ictal_notes}\` : ''}` : ''}`).join('\n\n') || 'приступов не зафиксировано'}
-
-━━━━━━━━━━━━━━━━━━━━━
-ДРУГИЕ СОБЫТИЯ
-━━━━━━━━━━━━━━━━━━━━━
-${(events || []).filter(e => e.event_type !== 'seizure').map(e => `${format(new Date(e.occurred_at), 'dd.MM.yyyy')}: ${evLabel(e.event_type)}${e.description ? \` — \${e.description}\` : ''}`).join('\n') || 'других событий нет'}
-
-━━━━━━━━━━━━━━━━━━━━━
-ДИНАМИКА
-━━━━━━━━━━━━━━━━━━━━━
-Дней с чек-инами: ${(checkins || []).length} из ${days}
-Заметки для врача: ${pet?.vet_notes || 'нет'}
-
-Отчёт сформирован приложением myvet.kz`
+  return lines.join('\n')
 }
