@@ -87,6 +87,16 @@ export async function generateVetReport(petId: string, days = 90): Promise<strin
   const seizures = (events || []).filter(e => e.event_type === 'seizure')
   const activeMeds = (meds || []).filter(m => !m.ended_at)
 
+  const EVENT_LABELS: Record<string, string> = {
+    seizure: 'Приступ', head_pressing: 'Хедпрессинг', food_refusal: 'Отказ от еды',
+    loaf_position: 'Буханка', no_urine_24h: 'Нет мочи 24ч+', no_stool_48h: 'Нет стула 48ч+',
+    vomiting: 'Рвота', strange_behavior: 'Странное поведение', claw_sharpening: 'Точение когтей',
+    meowing: 'Мяуканье', chirping: 'Чириканье', active_play: 'Активные игры',
+  }
+  const evLabel = (key: string) => EVENT_LABELS[key] || key
+  const POST_ICTAL: Record<string, string> = { standard: 'Стандартная (поела)', atypical: 'Нетипичная' }
+  const doseStr = (m: any) => m.dose_amount ? `${m.dose_amount}${m.dose_unit || 'мг'}` : 'доза не указана'
+
   return `ОТЧЁТ ДЛЯ ВЕТЕРИНАРА
 Сформирован: ${format(today, 'd MMMM yyyy', { locale: ru })}
 Период: ${format(from, 'd MMMM yyyy', { locale: ru })} — ${format(today, 'd MMMM yyyy', { locale: ru })}
@@ -107,22 +117,22 @@ ${(weights || []).map(w => `${w.measured_at}: ${w.weight_kg} кг`).join('\n') |
 ━━━━━━━━━━━━━━━━━━━━━
 ТЕКУЩАЯ СХЕМА ЛЕЧЕНИЯ
 ━━━━━━━━━━━━━━━━━━━━━
-${activeMeds.map(m => `• ${m.name} — ${m.dose_amount}${m.dose_unit} (с ${m.started_at})`).join('\n') || 'нет данных'}
+${activeMeds.map(m => `• ${m.name} — ${doseStr(m)} (с ${m.started_at})`).join('\n') || 'нет данных'}
 
 ━━━━━━━━━━━━━━━━━━━━━
 ИЗМЕНЕНИЯ В СХЕМЕ
 ━━━━━━━━━━━━━━━━━━━━━
-${(meds || []).filter(m => m.started_at >= format(from, 'yyyy-MM-dd')).map(m => `${m.started_at}: ${m.name} ${m.dose_amount}${m.dose_unit}${m.change_note ? ` — ${m.change_note}` : ''}`).join('\n') || 'изменений не было'}
+${(meds || []).filter(m => m.started_at >= format(from, 'yyyy-MM-dd')).map(m => `${m.started_at}: ${m.name} ${doseStr(m)}${m.change_note ? \` — \${m.change_note}\` : ''}`).join('\n') || 'изменений не было'}
 
 ━━━━━━━━━━━━━━━━━━━━━
 ПРИСТУПЫ (${seizures.length})
 ━━━━━━━━━━━━━━━━━━━━━
-${seizures.map(e => `${format(new Date(e.occurred_at), 'dd.MM.yyyy HH:mm')} [${e.identifier}]${e.duration_sec ? ` · ${Math.round(e.duration_sec / 60)} мин` : ''}${e.had_aura ? ' · с аурой' : ''}${e.description ? `\n  ${e.description}` : ''}${e.post_ictal_type ? `\n  Постиктал: ${e.post_ictal_type}${e.post_ictal_notes ? ` — ${e.post_ictal_notes}` : ''}` : ''}`).join('\n\n') || 'приступов не зафиксировано'}
+${seizures.map(e => `${format(new Date(e.occurred_at), 'dd.MM.yyyy HH:mm')} [${e.identifier}]${e.duration_sec ? ` · ${Math.round(e.duration_sec / 60)} мин` : ''}${e.had_aura ? ' · с аурой' : ''}${e.description ? `\n  ${e.description}` : ''}${e.post_ictal_type ? `\n  Постиктал: ${POST_ICTAL[e.post_ictal_type] || e.post_ictal_type}${e.post_ictal_notes ? \` — \${e.post_ictal_notes}\` : ''}` : ''}`).join('\n\n') || 'приступов не зафиксировано'}
 
 ━━━━━━━━━━━━━━━━━━━━━
 ДРУГИЕ СОБЫТИЯ
 ━━━━━━━━━━━━━━━━━━━━━
-${(events || []).filter(e => e.event_type !== 'seizure').map(e => `${format(new Date(e.occurred_at), 'dd.MM.yyyy')}: ${e.event_type}${e.description ? ` — ${e.description}` : ''}`).join('\n') || 'других событий нет'}
+${(events || []).filter(e => e.event_type !== 'seizure').map(e => `${format(new Date(e.occurred_at), 'dd.MM.yyyy')}: ${evLabel(e.event_type)}${e.description ? \` — \${e.description}\` : ''}`).join('\n') || 'других событий нет'}
 
 ━━━━━━━━━━━━━━━━━━━━━
 ДИНАМИКА
