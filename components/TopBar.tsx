@@ -28,18 +28,13 @@ export default function TopBar({ showBack, backHref = '/', backLabel = 'Наза
         )}
         {title && <span className="text-[13px] font-bold text-[#1C1C1E] absolute left-1/2 -translate-x-1/2">{title}</span>}
         <div className="flex items-center gap-2">
-          {/* Pet switcher - only show if more than one pet */}
-          {pets.length > 1 && activePet && (
+          {/* Pet switcher - always clickable */}
+          {activePet && (
             <button onClick={() => setShowSwitcher(!showSwitcher)}
               className="flex items-center gap-1 bg-[#FFF4EF] px-2 py-1 rounded-[8px] border border-[#FDD5C0]">
               <span className="text-[11px] font-bold text-[#FD6220]">{activePet.name}</span>
               <ChevronDown size={12} className="text-[#FD6220]" />
             </button>
-          )}
-          {pets.length === 1 && activePet && (
-            <span className="text-[11px] font-semibold text-[#1C1C1E] bg-[#F2F2F7] px-2 py-1 rounded-[8px]">
-              🐱 {activePet.name}
-            </span>
           )}
           <Link href="/settings" className="w-7 h-7 rounded-[8px] bg-[#F2F2F7] flex items-center justify-center">
             <Settings size={14} className="text-[#8E8E93]" />
