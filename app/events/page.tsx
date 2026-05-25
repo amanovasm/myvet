@@ -49,16 +49,9 @@ function EventsContent() {
   }, [])
 
   useEffect(() => {
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { window.location.href = '/login'; return }
-      const userId = user.id
-      supabase.from('pets').select('id').eq('user_id', userId).limit(1).single().then(({ data }) => {
-      if (data) { setPetId(data.id); loadEvents(data.id, format(new Date(), 'yyyy-MM-dd')) }
-      else setLoading(false)
-    })
-    })()
-  }, [loadEvents])
+    if (petId) loadEvents(petId, format(new Date(), 'yyyy-MM-dd'))
+    else setLoading(false)
+  }, [petId, loadEvents])
 
   // Перезагружаем при возврате со страницы сохранения
   useEffect(() => {

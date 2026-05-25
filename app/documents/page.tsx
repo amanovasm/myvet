@@ -61,18 +61,10 @@ export default function DocumentsPage() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
 
-  useEffect(() => {
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { window.location.href = '/login'; return }
-      const userId = user.id
-      supabase.from('pets').select('id').eq('user_id', userId).limit(1).single().then(({ data }) => {
-      if (data) { setPetId(data.id); loadAll(data.id) }
-      else setLoading(false)
-    })
-    })()
-  }, [])
-
+   useEffect(() => {
+     if (petId) loadAll(petId)
+     else setLoading(false)
+   }, [petId])
   async function loadAll(pid: string) {
     setLoading(true)
     const [docsRes, labRes] = await Promise.all([

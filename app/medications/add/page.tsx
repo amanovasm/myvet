@@ -29,7 +29,7 @@ export default function AddMedicationPage() {
       if (!user) { window.location.href = '/login'; return }
       const userId = user.id
       supabase.from('pets').select('id').eq('user_id', userId).limit(1).single().then(({ data }) => {
-      if (data) setPetId(data.id)
+      // petId comes from useCurrentPet hook
     })
     })()
   }, [])

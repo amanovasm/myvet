@@ -14,17 +14,9 @@ export default function DigestPage() {
   const { petId } = useCurrentPet()
 
   useEffect(() => {
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { window.location.href = '/login'; return }
-      const userId = user.id
-      supabase.from('pets').select('id').eq('user_id', userId).limit(1).single().then(({ data }) => {
-      if (!data) { setLoading(false); return }
-      setPetId(data.id)
-      load(data.id)
-    })
-    })()
-  }, [])
+    if (petId) load(petId)
+    else setLoading(false)
+  }, [petId])
 
   async function load(pid: string) {
     const { data } = await supabase.from('ai_digests').select('*').eq('pet_id', pid).order('created_at', { ascending: false }).limit(5)
