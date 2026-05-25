@@ -48,7 +48,7 @@ function EventsContent() {
   }, [])
 
   useEffect(() => {
-    supabase.from('pets').select('id').not('user_id', 'is', null).limit(1).single().then(({ data }) => {
+    supabase.from('pets').select('id').eq('user_id', (await supabase.auth.getUser()).data.user?.id ?? '').limit(1).single().then(({ data }) => {
       if (data) { setPetId(data.id); loadEvents(data.id, format(new Date(), 'yyyy-MM-dd')) }
       else setLoading(false)
     })

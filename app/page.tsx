@@ -42,7 +42,7 @@ export default function Dashboard() {
   const today = format(new Date(), 'yyyy-MM-dd')
 
   const loadData = useCallback(async () => {
-    const { data: p } = await supabase.from('pets').select('*').not('user_id', 'is', null).limit(1).single()
+    const { data: p } = await supabase.from('pets').select('*').eq('user_id', (await supabase.auth.getUser()).data.user?.id ?? '').limit(1).single()
     if (!p) { setLoading(false); return }
     setPet(p)
 

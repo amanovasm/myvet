@@ -31,7 +31,7 @@ export default function PetPage() {
   const [weight, setWeight] = useState('')
 
   useEffect(() => {
-    supabase.from('pets').select('*').not('user_id', 'is', null).limit(1).single().then(({ data }) => {
+    supabase.from('pets').select('*').eq('user_id', (await supabase.auth.getUser()).data.user?.id ?? '').limit(1).single().then(({ data }) => {
       if (data) {
         setPetId(data.id)
         setName(data.name || '')

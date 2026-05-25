@@ -23,7 +23,7 @@ export default function AddMedicationPage() {
   const [schedules, setSchedules] = useState<ScheduleEntry[]>([{ time: '08:00', dose: '' }])
 
   useEffect(() => {
-    supabase.from('pets').select('id').not('user_id', 'is', null).limit(1).single().then(({ data }) => {
+    supabase.from('pets').select('id').eq('user_id', (await supabase.auth.getUser()).data.user?.id ?? '').limit(1).single().then(({ data }) => {
       if (data) setPetId(data.id)
     })
   }, [])
