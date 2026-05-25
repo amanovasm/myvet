@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
+  // Always allow these paths
   if (
     pathname.startsWith('/login') ||
     pathname.startsWith('/auth') ||
@@ -14,31 +14,18 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  const response = NextResponse.next()
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return req.cookies.getAll() },
-        setAll(cookies: { name: string; value: string; options?: any }[]) {
-          cookies.forEach(({ name, value, options }) => {
-            req.cookies.set(name, value)
-            response.cookies.set(name, value, options)
-          })
-        },
-      },
-    }
+  // Check for supabase session cookie
+  const cookies = req.cookies.getAll()
+  const hasSession = cookies.some(c =>
+    (c.name.startsWith('sb-') && c.name.includes('auth-token')) ||
+    c.name === 'supabase-auth-token'
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) {
+  if (!hasSession) {
     return NextResponse.redirect(new URL('/login', req.url))
   }
 
-  return response
+  return NextResponse.next()
 }
 
 export const config = {
