@@ -107,7 +107,7 @@ export default function Dashboard() {
         <div className="text-5xl">🐱</div>
         <h1 className="text-[18px] font-bold text-center text-[#1C1C1E]">Добро пожаловать в myvet</h1>
         <p className="text-[13px] text-[#8E8E93] text-center">Добавьте питомца чтобы начать вести дневник</p>
-        <Link href="/pet" className="bg-[#FD6220] text-white font-bold rounded-[12px] py-3 px-8 text-[13px]">
+        <Link href="/pet/new" className="bg-[#FD6220] text-white font-bold rounded-[12px] py-3 px-8 text-[13px]">
           + Добавить питомца
         </Link>
       </div>
