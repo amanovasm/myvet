@@ -3,12 +3,14 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  // Always allow these
+  // Always allow these - no auth check
   if (
+    pathname === '/login' ||
     pathname.startsWith('/login') ||
-    pathname.startsWith('/auth') ||
-    pathname.startsWith('/api') ||
-    pathname.startsWith('/_next') ||
+    pathname.startsWith('/auth/') ||
+    pathname === '/auth' ||
+    pathname.startsWith('/api/') ||
+    pathname.startsWith('/_next/') ||
     pathname.includes('.')
   ) {
     return NextResponse.next()
@@ -20,7 +22,6 @@ export async function middleware(req: NextRequest) {
     c.name.startsWith('sb-') && c.name.includes('auth-token')
   )
 
-  // Not logged in → login page
   if (!hasSession) {
     return NextResponse.redirect(new URL('/login', req.url))
   }
