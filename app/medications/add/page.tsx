@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { useCurrentPet } from '@/lib/hooks'
 import { format } from 'date-fns'
 import { Check, Minus, Plus, X } from 'lucide-react'
 import Link from 'next/link'
@@ -10,7 +11,7 @@ interface ScheduleEntry { time: string; dose: string }
 
 export default function AddMedicationPage() {
   const router = useRouter()
-  const [petId, setPetId] = useState<string | null>(null)
+  const { petId } = useCurrentPet()
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState(false)
 

@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useCurrentPet } from '@/lib/hooks'
 import { format, subDays } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
@@ -20,7 +21,7 @@ interface DoseStatus {
 }
 
 export default function MedicationsPage() {
-  const [petId, setPetId] = useState<string | null>(null)
+  const { petId } = useCurrentPet()
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [doses, setDoses] = useState<Record<string, DoseStatus[]>>({})
   const [loading, setLoading] = useState(true)

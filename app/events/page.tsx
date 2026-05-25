@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useCurrentPet } from '@/lib/hooks'
 import { format, subDays } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import TopBar from '@/components/TopBar'
@@ -26,7 +27,7 @@ interface HealthEvent {
 
 function EventsContent() {
   const searchParams = useSearchParams()
-  const [petId, setPetId] = useState<string | null>(null)
+  const { petId } = useCurrentPet()
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [events, setEvents] = useState<HealthEvent[]>([])
   const [loading, setLoading] = useState(true)
@@ -56,6 +57,7 @@ function EventsContent() {
       if (data) { setPetId(data.id); loadEvents(data.id, format(new Date(), 'yyyy-MM-dd')) }
       else setLoading(false)
     })
+    })()
   }, [loadEvents])
 
   // Перезагружаем при возврате со страницы сохранения

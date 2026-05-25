@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useCurrentPet } from '@/lib/hooks'
 import { formatDateRu } from '@/lib/utils'
 import { RefreshCw, Sparkles } from 'lucide-react'
 import TopBar from '@/components/TopBar'
@@ -10,7 +11,7 @@ export default function DigestPage() {
   const [digests, setDigests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
-  const [petId, setPetId] = useState<string | null>(null)
+  const { petId } = useCurrentPet()
 
   useEffect(() => {
     (async () => {

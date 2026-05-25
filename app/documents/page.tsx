@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useCurrentPet } from '@/lib/hooks'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
@@ -42,7 +43,7 @@ const emptyEntry = (): LabEntry => ({
 })
 
 export default function DocumentsPage() {
-  const [petId, setPetId] = useState<string | null>(null)
+  const { petId } = useCurrentPet()
   const [documents, setDocuments] = useState<any[]>([])
   const [labResults, setLabResults] = useState<any[]>([])
   const [existingParams, setExistingParams] = useState<any[]>([]) // unique params already in DB

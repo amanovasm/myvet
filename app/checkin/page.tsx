@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useCurrentPet } from '@/lib/hooks'
 import { cn, APPETITE_OPTIONS, STOOL_TYPE_OPTIONS, URINE_VOLUME_OPTIONS, ACTIVITY_OPTIONS, WATER_OPTIONS } from '@/lib/utils'
 import { format, subDays } from 'date-fns'
 import { ru } from 'date-fns/locale'
@@ -79,10 +80,13 @@ export default function CheckinPage() {
   }, [])
 
   useEffect(()=>{
-    supabase.from('pets').select('id').eq('user_id', userId).limit(1).single().then(({data})=>{
-      if (data) { setPetId(data.id); loadCheckin(data.id, today) }
+    ;(async()=>{
+      const {data:{user}} = await supabase.auth.getUser()
+      if (!user){window.location.href='/login';return}
+      const {data} = await supabase.from('pets').select('id').eq('user_id',user.id).limit(1).single()
+      if (data){setPetId(data.id);loadCheckin(data.id,today)}
       else setLoading(false)
-    })
+    })()
   },[loadCheckin, today])
 
   function changeDate(d:string){
