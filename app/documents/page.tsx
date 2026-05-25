@@ -232,39 +232,68 @@ export default function DocumentsPage() {
                 <p className="text-sm font-medium">Показателей пока нет</p>
               </div>
             ) : (
-              Object.entries(byParam).map(([key, values]) => {
-                const sorted = [...values].sort((a, b) => a.document_date.localeCompare(b.document_date))
-                const latest = sorted[sorted.length - 1]
-                const hasAbnormal = sorted.some(v => v.is_abnormal)
+              (() => {
+                const allDates = Array.from(new Set(filteredResults.map((r: any) => r.document_date))).sort() as string[]
+                const params = Object.entries(byParam)
                 return (
-                  <div key={key} className="bg-white rounded-[13px] border border-[#E5E5EA] p-[10px_12px]">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-1.5">
-                        {hasAbnormal ? <AlertCircle size={12} className="text-red-500" /> : <CheckCircle size={12} className="text-green-500" />}
-                        <span className="text-[10px] font-bold text-[#1C1C1E]">{latest.parameter_name}</span>
-                      </div>
-                      {latest.unit && <span className="text-[8px] text-[#8E8E93]">{latest.unit}</span>}
-                    </div>
-                    <div className="flex gap-4 overflow-x-auto">
-                      {sorted.map((v: any, i: number) => (
-                        <div key={i} className="flex-shrink-0 text-center min-w-[40px]">
-                          <div className={cn('text-[13px] font-bold', v.is_abnormal ? 'text-red-500' : 'text-[#1C1C1E]')}>
-                            {v.value ?? v.value_text ?? '—'}
-                          </div>
-                          <div className="text-[7px] text-[#8E8E93]">
-                            {format(new Date(v.document_date + 'T12:00:00'), 'dd.MM.yy')}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    {(latest.ref_min !== null || latest.ref_max !== null) && (
-                      <p className="text-[7px] text-[#8E8E93] mt-1.5">
-                        Норма: {latest.ref_min ?? '?'} — {latest.ref_max ?? '?'} {latest.unit}
-                      </p>
-                    )}
+                  <div className="bg-white rounded-[13px] border border-[#E5E5EA] overflow-x-auto">
+                    <table className="w-full min-w-full">
+                      <thead>
+                        <tr style={{background:'#F9F9F9'}}>
+                          <th className="text-[8px] font-bold text-[#8E8E93] p-2 text-left border-b border-[#F2F2F7] min-w-[110px]">Показатель</th>
+                          {allDates.map(date => (
+                            <th key={date} className="text-[8px] font-bold text-[#8E8E93] p-2 text-center border-b border-l border-[#F2F2F7] min-w-[60px]">
+                              {format(new Date(date + 'T12:00:00'), 'dd.MM.yy')}
+                            </th>
+                          ))}
+                          <th className="text-[8px] font-bold text-[#8E8E93] p-2 text-center border-b border-l border-[#F2F2F7] min-w-[80px]">Норма</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {params.map(([key, values], idx) => {
+                          const latest = (values as any[])[values.length - 1]
+                          const byDate: Record<string, any> = {}
+                          ;(values as any[]).forEach((v: any) => { byDate[v.document_date] = v })
+                          const hasAbnormal = (values as any[]).some((v: any) => v.is_abnormal)
+                          return (
+                            <tr key={key} className={idx % 2 === 0 ? '' : 'bg-[#FAFAFA]'}>
+                              <td className="p-2 border-b border-[#F2F2F7]">
+                                <div className="flex items-center gap-1">
+                                  {hasAbnormal
+                                    ? <AlertCircle size={9} className="text-red-500 flex-shrink-0" />
+                                    : <CheckCircle size={9} className="text-green-500 flex-shrink-0" />}
+                                  <span className="text-[9px] font-semibold text-[#1C1C1E] leading-tight">{latest.parameter_name}</span>
+                                </div>
+                              </td>
+                              {allDates.map(date => {
+                                const v = byDate[date]
+                                return (
+                                  <td key={date} className="p-2 text-center border-b border-l border-[#F2F2F7]">
+                                    {v ? (
+                                      <span className={cn('text-[11px] font-bold', v.is_abnormal ? 'text-red-500' : 'text-[#1C1C1E]')}>
+                                        {v.value ?? v.value_text ?? '—'}
+                                      </span>
+                                    ) : (
+                                      <span className="text-[10px] text-[#C7C7CC]">—</span>
+                                    )}
+                                  </td>
+                                )
+                              })}
+                              <td className="p-2 text-center border-b border-l border-[#F2F2F7]">
+                                {(latest.ref_min !== null || latest.ref_max !== null) ? (
+                                  <span className="text-[7px] text-[#8E8E93] whitespace-nowrap">{latest.ref_min ?? '?'}–{latest.ref_max ?? '?'} {latest.unit}</span>
+                                ) : (
+                                  <span className="text-[7px] text-[#C7C7CC]">—</span>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 )
-              })
+              })()
             )}
           </>
         )}
