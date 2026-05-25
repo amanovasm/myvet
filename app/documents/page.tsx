@@ -80,11 +80,11 @@ export default function DocumentsPage() {
     const json = await res.json()
     setUploading(false)
 
-    if (json.needs_manual_input) {
-      // PDF is image-based, show manual input form
+    if (json.needs_manual_input || (json.document && json.parameters_count === 0)) {
       setPendingFile(file)
       setShowManual(true)
-      setStatus({type:'info', text:'PDF содержит только изображение. Введите данные вручную.'})
+      if (json.document) await loadAll(petId) // save doc but show manual form
+      setStatus({type:'info', text:'Не удалось извлечь показатели автоматически. Введи данные вручную.'})
     } else if (json.error) {
       setStatus({type:'error', text:'Ошибка: ' + json.error})
     } else {
@@ -160,12 +160,16 @@ export default function DocumentsPage() {
                 <X size={14} className="text-[#8E8E93]" />
               </button>
             </div>
-            <p className="text-[8px] text-[#8E8E93] mb-2">
-              Перепишите показатели из документа. Например:
-              Фенобарбитал: 30 мкг/мл (норма 15-40)
-              Леветирацетам: 43.2 мкг/мл (норма 10-37)
-              Дата: 25.04.2026
+            <p className="text-[9px] text-[#8E8E93] mb-2 leading-relaxed">
+              Скопируй данные из документа или введи вручную. Формат:
             </p>
+            <div className="bg-[#F2F2F7] rounded-[8px] p-2 mb-2">
+              <p className="text-[9px] font-mono text-[#3C3C43] leading-relaxed">
+                АЛТ: 95.9 U/l (норма 19-79)<br/>
+                Глюкоза: 4.9 mmol/l (норма 3.3-6.3)<br/>
+                Дата: 06.04.2024
+              </p>
+            </div>
             <textarea value={manualText} onChange={e => setManualText(e.target.value)}
               placeholder="Введите показатели из документа..." rows={5}
               className="w-full border border-[#E5E5EA] rounded-[8px] p-2 text-[10px] font-medium resize-none outline-none focus:border-[#FD6220] mb-2" />
