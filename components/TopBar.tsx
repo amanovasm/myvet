@@ -19,7 +19,7 @@ export default function TopBar({ petName, showBack, backHref = '/', backLabel = 
           <ChevronLeft size={16} /> {backLabel}
         </Link>
       ) : (
-        <Link href="/" className="text-[#FD6220] font-bold text-[18px]">myvet</Link>
+        <Link href="/"><img src="/logo-sm.png" alt="myvet" style={{height: '26px', width: 'auto'}} /></Link>
       )}
       {title && <span className="text-[13px] font-bold text-[#1C1C1E] absolute left-1/2 -translate-x-1/2">{title}</span>}
       <div className="flex items-center gap-2">
