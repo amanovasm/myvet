@@ -12,13 +12,11 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const petId = searchParams.get('petId')
   if (!petId) return NextResponse.json({ error: 'petId required' }, { status: 400 })
-
   const { data: docs } = await supabase
     .from('medical_documents')
     .select('*')
     .eq('pet_id', petId)
     .order('document_date', { ascending: false })
-
   return NextResponse.json({ documents: docs || [] })
 }
 
@@ -27,37 +25,52 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData()
     const petId = formData.get('petId') as string
     const file = formData.get('file') as File
+    const manualText = formData.get('manual_text') as string | null
 
-    if (!petId || !file) return NextResponse.json({ error: 'missing params' }, { status: 400 })
+    if (!petId) return NextResponse.json({ error: 'petId required' }, { status: 400 })
 
-    const arrayBuffer = await file.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
+    let pdfText = manualText || ''
+    let fileUrl: string | null = null
 
-    // Extract text from PDF using pdf-parse
-    let pdfText = ''
-    try {
-      const pdfParse = (await import('pdf-parse')).default
-      const pdfData = await pdfParse(buffer)
-      pdfText = pdfData.text
-    } catch (e) {
-      console.error('PDF parse error:', e)
-      pdfText = `Файл: ${file.name}`
+    if (file && file.size > 0) {
+      const arrayBuffer = await file.arrayBuffer()
+      const buffer = Buffer.from(arrayBuffer)
+
+      // Try pdf-parse first
+      try {
+        const pdfParse = require('pdf-parse')
+        const pdfData = await pdfParse(buffer)
+        if (pdfData.text && pdfData.text.trim().length > 50) {
+          pdfText = pdfData.text
+        }
+      } catch (e) {
+        console.log('pdf-parse failed, will use manual text if provided')
+      }
+
+      // Upload to storage
+      const fileName = `${petId}/${Date.now()}_${file.name}`
+      const { error: uploadError } = await supabase.storage
+        .from('medical-docs')
+        .upload(fileName, buffer, { contentType: 'application/pdf' })
+      fileUrl = fileName // always save path, file is in storage
     }
 
-    // Upload to Supabase Storage
-    const fileName = `${petId}/${Date.now()}_${file.name}`
-    const { error: uploadError } = await supabase.storage
-      .from('medical-docs')
-      .upload(fileName, buffer, { contentType: 'application/pdf' })
-    const fileUrl = uploadError ? null : fileName
+    // If no text extracted, return special status asking for manual input
+    if (!pdfText || pdfText.trim().length < 50) {
+      return NextResponse.json({
+        needs_manual_input: true,
+        file_name: file?.name || '',
+        message: 'PDF не содержит извлекаемого текста. Введите данные вручную.'
+      })
+    }
 
-    // Send extracted text to Claude Haiku
+    // Parse with Claude
     const response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 2000,
       messages: [{
         role: 'user',
-        content: `Это текст из лабораторного документа. Анализы сданы в лаборатории для животного (кошки). Не важно что лаборатория человеческая — извлекай все данные.
+        content: `Это лабораторный документ для животного (кошки). Анализы сданы в человеческой лаборатории — это нормально.
 
 ТЕКСТ ДОКУМЕНТА:
 ${pdfText.slice(0, 6000)}
@@ -80,19 +93,17 @@ ${pdfText.slice(0, 6000)}
     }
   ]
 }
-Типы: oac=ОАК, biochemistry=биохимия, urinalysis=анализ мочи, ultrasound=УЗИ, discharge=выписка, phenobarbital=уровень противосудорожных препаратов, other=прочее.
-Извлеки ВСЕ числовые показатели.`
+Типы: oac=ОАК, biochemistry=биохимия, urinalysis=анализ мочи, ultrasound=УЗИ, discharge=выписка, phenobarbital=уровень противосудорожных препаратов.
+Извлеки ВСЕ числовые показатели. Дату бери из документа.`
       }]
     })
 
     const rawText = response.content[0].type === 'text' ? response.content[0].text : '{}'
-
     let parsed: any = {}
     try {
-      const clean = rawText.replace(/```json\n?|\n?```/g, '').trim()
-      parsed = JSON.parse(clean)
+      parsed = JSON.parse(rawText.replace(/```json\n?|\n?```/g, '').trim())
     } catch {
-      parsed = { document_type: 'other', document_date: null, title: file.name, parameters: [] }
+      parsed = { document_type: 'other', document_date: null, title: file?.name || 'Документ', parameters: [] }
     }
 
     const docDate = parsed.document_date || new Date().toISOString().slice(0, 10)
@@ -103,7 +114,7 @@ ${pdfText.slice(0, 6000)}
         pet_id: petId,
         document_type: parsed.document_type || 'other',
         document_date: docDate,
-        title: parsed.title || file.name,
+        title: parsed.title || file?.name || 'Документ',
         file_url: fileUrl,
         raw_text: pdfText.slice(0, 5000),
       })
@@ -112,26 +123,23 @@ ${pdfText.slice(0, 6000)}
     if (docError) return NextResponse.json({ error: docError.message }, { status: 500 })
 
     let parametersInserted = 0
-    if (parsed.parameters?.length > 0) {
-      for (const p of parsed.parameters) {
-        if (!p.parameter_name || !p.parameter_key) continue
-        const { error: labError } = await supabase.from('lab_results').insert({
-          pet_id: petId,
-          document_id: doc.id,
-          document_date: docDate,
-          category: parsed.document_type || 'other',
-          parameter_name: String(p.parameter_name),
-          parameter_key: String(p.parameter_key),
-          value: (p.value !== null && !isNaN(Number(p.value))) ? Number(p.value) : null,
-          value_text: p.value_text ? String(p.value_text) : null,
-          unit: p.unit ? String(p.unit) : null,
-          ref_min: (p.ref_min !== null && !isNaN(Number(p.ref_min))) ? Number(p.ref_min) : null,
-          ref_max: (p.ref_max !== null && !isNaN(Number(p.ref_max))) ? Number(p.ref_max) : null,
-          is_abnormal: Boolean(p.is_abnormal),
-        })
-        if (!labError) parametersInserted++
-        else console.error('Lab insert error:', labError.message)
-      }
+    for (const p of (parsed.parameters || [])) {
+      if (!p.parameter_name || !p.parameter_key) continue
+      const { error } = await supabase.from('lab_results').insert({
+        pet_id: petId,
+        document_id: doc.id,
+        document_date: docDate,
+        category: parsed.document_type || 'other',
+        parameter_name: String(p.parameter_name),
+        parameter_key: String(p.parameter_key),
+        value: (p.value !== null && p.value !== undefined && !isNaN(Number(p.value))) ? Number(p.value) : null,
+        value_text: p.value_text ? String(p.value_text) : null,
+        unit: p.unit ? String(p.unit) : null,
+        ref_min: (p.ref_min !== null && !isNaN(Number(p.ref_min))) ? Number(p.ref_min) : null,
+        ref_max: (p.ref_max !== null && !isNaN(Number(p.ref_max))) ? Number(p.ref_max) : null,
+        is_abnormal: Boolean(p.is_abnormal),
+      })
+      if (!error) parametersInserted++
     }
 
     return NextResponse.json({ document: doc, parameters_count: parametersInserted })
