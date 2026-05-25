@@ -43,7 +43,7 @@ const emptyEntry = (): LabEntry => ({
 })
 
 export default function DocumentsPage() {
-  const { petId } = useCurrentPet()
+  const { petId } = usePet()
   const [documents, setDocuments] = useState<any[]>([])
   const [labResults, setLabResults] = useState<any[]>([])
   const [existingParams, setExistingParams] = useState<any[]>([]) // unique params already in DB

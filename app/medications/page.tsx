@@ -21,7 +21,7 @@ interface DoseStatus {
 }
 
 export default function MedicationsPage() {
-  const { petId } = useCurrentPet()
+  const { petId } = usePet()
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [doses, setDoses] = useState<Record<string, DoseStatus[]>>({})
   const [loading, setLoading] = useState(true)

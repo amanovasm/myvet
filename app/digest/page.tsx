@@ -11,7 +11,7 @@ export default function DigestPage() {
   const [digests, setDigests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
-  const { petId } = useCurrentPet()
+  const { petId } = usePet()
 
   useEffect(() => {
     if (petId) load(petId)

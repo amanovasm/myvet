@@ -27,7 +27,7 @@ interface HealthEvent {
 
 function EventsContent() {
   const searchParams = useSearchParams()
-  const { petId } = useCurrentPet()
+  const { petId } = usePet()
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [events, setEvents] = useState<HealthEvent[]>([])
   const [loading, setLoading] = useState(true)
