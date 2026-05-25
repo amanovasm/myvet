@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
-import { useCurrentPet } from '@/lib/hooks'
+import { usePet } from '@/lib/pet-context'
 import { format, subDays } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import TopBar from '@/components/TopBar'

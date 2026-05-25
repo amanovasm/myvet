@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { useCurrentPet } from '@/lib/hooks'
+import { usePet } from '@/lib/pet-context'
 import { formatDateRu } from '@/lib/utils'
 import { RefreshCw, Sparkles } from 'lucide-react'
 import TopBar from '@/components/TopBar'

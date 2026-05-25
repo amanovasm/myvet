@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { useCurrentPet } from '@/lib/hooks'
+import { usePet } from '@/lib/pet-context'
 import { cn, APPETITE_OPTIONS, STOOL_TYPE_OPTIONS, URINE_VOLUME_OPTIONS, ACTIVITY_OPTIONS, WATER_OPTIONS } from '@/lib/utils'
 import { format, subDays } from 'date-fns'
 import { ru } from 'date-fns/locale'
@@ -40,7 +40,7 @@ function Stepper({ value, onChange }: { value:number; onChange:(v:number)=>void 
 }
 
 export default function CheckinPage() {
-  const [petId, setPetId] = useState<string|null>(null)
+  const { petId } = usePet()
   const [selectedDate, setSelectedDate] = useState(format(new Date(),'yyyy-MM-dd'))
   const [checkin, setCheckin] = useState<any>(null)   // null = нет записи, object = есть запись
   const [loading, setLoading] = useState(true)
