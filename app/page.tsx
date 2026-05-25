@@ -24,12 +24,6 @@ const DIR_DOT: Record<string, string> = {
 export default function Dashboard() {
   const router = useRouter()
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) window.location.href = '/login'
-    })
-  }, [])
-
   const [loading, setLoading] = useState(true)
   const [pet, setPet] = useState<any>(null)
   const [checkin, setCheckin] = useState<any>(null)
@@ -42,7 +36,9 @@ export default function Dashboard() {
   const today = format(new Date(), 'yyyy-MM-dd')
 
   const loadData = useCallback(async () => {
-    const { data: p } = await supabase.from('pets').select('*').eq('user_id', userId).limit(1).single()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { window.location.href = '/login'; return }
+    const { data: p } = await supabase.from('pets').select('*').eq('user_id', user.id).limit(1).single()
     if (!p) { setLoading(false); return }
     setPet(p)
 
