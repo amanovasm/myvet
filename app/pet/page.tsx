@@ -60,14 +60,15 @@ export default function PetPage() {
     if (petId) {
       await supabase.from('pets').update(petData).eq('id', petId)
     } else {
-      const { data: p } = await supabase.from('pets').insert(petData).select().single()
+      const { data: { user } } = await supabase.auth.getUser()
+      const { data: p } = await supabase.from('pets').insert({ ...petData, user_id: user?.id }).select().single()
       savedId = p?.id || null
     }
     if (weight && savedId) {
       await supabase.from('weight_log').insert({ pet_id: savedId, weight_kg: parseFloat(weight), measured_at: format(new Date(), 'yyyy-MM-dd') })
     }
-    setDone(true)
     setSaving(false)
+    window.location.href = '/'
   }
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-sm text-[#8E8E93]">Загружаем...</div>
