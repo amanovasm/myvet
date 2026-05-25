@@ -31,7 +31,7 @@ export default function TopBar({ petName, showBack, backHref = '/', backLabel = 
         <Link href="/settings" className="w-7 h-7 rounded-[8px] bg-[#F2F2F7] flex items-center justify-center">
           <Settings size={14} className="text-[#8E8E93]" />
         </Link>
-        <Link href="/pet" className="w-7 h-7 rounded-[8px] bg-[#F2F2F7] flex items-center justify-center">
+        <Link href="/profile" className="w-7 h-7 rounded-[8px] bg-[#F2F2F7] flex items-center justify-center">
           <User size={14} className="text-[#8E8E93]" />
         </Link>
       </div>
