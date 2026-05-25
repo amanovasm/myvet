@@ -1,15 +1,12 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { PetProvider } from '@/lib/pet-context'
 
 export const metadata: Metadata = {
-  title: 'myvet — здоровье Мави',
-  description: 'Дневник здоровья для питомца с эпилепсией',
+  title: 'myvet — здоровье питомца',
+  description: 'Дневник здоровья для питомца',
   manifest: '/manifest.json',
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'default',
-    title: 'myvet',
-  },
+  appleWebApp: { capable: true, statusBarStyle: 'default', title: 'myvet' },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -26,9 +23,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="manifest" href="/manifest.json" />
       </head>
       <body className="min-h-screen bg-[#F2F2F7]">
-        <div className="max-w-md mx-auto min-h-screen relative">
-          {children}
-        </div>
+        <PetProvider>
+          <div className="max-w-md mx-auto min-h-screen relative">
+            {children}
+          </div>
+        </PetProvider>
       </body>
     </html>
   )
