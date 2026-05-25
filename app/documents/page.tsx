@@ -6,7 +6,7 @@ import { ru } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 import TopBar from '@/components/TopBar'
 import BottomNav from '@/components/BottomNav'
-import { Upload, AlertCircle, CheckCircle, X, FileText, ExternalLink } from 'lucide-react'
+import { Upload, AlertCircle, CheckCircle, ExternalLink, Plus, X, FileText, BarChart2 } from 'lucide-react'
 
 const DOC_TYPE_LABEL: Record<string, string> = {
   oac: 'ОАК', biochemistry: 'Биохимия', urinalysis: 'Анализ мочи',
@@ -28,15 +28,18 @@ export default function DocumentsPage() {
   const [documents, setDocuments] = useState<any[]>([])
   const [labResults, setLabResults] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [uploading, setUploading] = useState(false)
-  const [status, setStatus] = useState<{type: 'error'|'success'|'info', text: string} | null>(null)
   const [tab, setTab] = useState<'docs' | 'dynamics'>('docs')
   const [selectedCategory, setSelectedCategory] = useState('all')
-  // Manual input state
+
+  // PDF upload state
+  const [uploading, setUploading] = useState(false)
+  const [uploadStatus, setUploadStatus] = useState<{type: 'error'|'success', text: string} | null>(null)
+
+  // Manual entry state
   const [showManual, setShowManual] = useState(false)
   const [manualText, setManualText] = useState('')
-  const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [submittingManual, setSubmittingManual] = useState(false)
+  const [manualStatus, setManualStatus] = useState<{type: 'error'|'success', text: string} | null>(null)
 
   useEffect(() => {
     supabase.from('pets').select('id').limit(1).single().then(({ data }) => {
@@ -56,65 +59,73 @@ export default function DocumentsPage() {
     setLoading(false)
   }
 
+  // Флоу 1: Загрузить PDF — только сохраняет файл, без парсинга
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !petId) return
+    if (!file.name.endsWith('.pdf') && !file.name.endsWith('.docx')) {
+      setUploadStatus({ type: 'error', text: 'Поддерживаются PDF и DOCX' })
+      return
+    }
+    setUploading(true)
+    setUploadStatus(null)
+
+    const sanitizedName = file.name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._-]/g, '_')
+    const fileName = `${petId}/${Date.now()}_${sanitizedName}`
+    const arrayBuffer = await file.arrayBuffer()
+    const buffer = Buffer.from ? Buffer.from(arrayBuffer) : new Uint8Array(arrayBuffer)
+
+    // Upload directly to storage + save doc record via API
+    const formData = new FormData()
+    formData.append('petId', petId)
+    formData.append('file', file)
+    formData.append('store_only', 'true') // new flag: just store, don't parse
+
+    const res = await fetch('/api/documents', { method: 'POST', body: formData })
+    const json = await res.json()
+
+    if (json.error) {
+      setUploadStatus({ type: 'error', text: 'Ошибка: ' + json.error })
+    } else {
+      setUploadStatus({ type: 'success', text: 'Документ сохранён' })
+      await loadAll(petId)
+    }
+    setUploading(false)
+    e.target.value = ''
+  }
+
+  // Флоу 2: Внести результаты вручную → в динамику
+  async function submitManual() {
+    if (!petId || !manualText.trim()) return
+    setSubmittingManual(true)
+    setManualStatus(null)
+
+    const formData = new FormData()
+    formData.append('petId', petId)
+    formData.append('manual_text', manualText)
+
+    const res = await fetch('/api/documents', { method: 'POST', body: formData })
+    const json = await res.json()
+
+    if (json.error) {
+      setManualStatus({ type: 'error', text: 'Ошибка: ' + json.error })
+    } else if (json.parameters_count === 0) {
+      setManualStatus({ type: 'error', text: 'Не удалось распознать показатели. Проверь формат.' })
+    } else {
+      setManualStatus({ type: 'success', text: `Сохранено! Добавлено ${json.parameters_count} показателей` })
+      setManualText('')
+      setTimeout(() => { setShowManual(false); setManualStatus(null) }, 2000)
+      await loadAll(petId)
+    }
+    setSubmittingManual(false)
+  }
+
   async function openDoc(docId: string, fileUrl: string | null) {
     if (!fileUrl) { alert('Файл не загружен в хранилище'); return }
     const res = await fetch(`/api/documents/view?docId=${docId}`)
     const json = await res.json()
     if (json.url) window.open(json.url, '_blank')
     else alert('Не удалось открыть файл')
-  }
-
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file || !petId) return
-    if (file.type !== 'application/pdf') { setStatus({type:'error', text:'Только PDF файлы'}); return }
-
-    setUploading(true)
-    setStatus(null)
-
-    const formData = new FormData()
-    formData.append('petId', petId)
-    formData.append('file', file)
-
-    const res = await fetch('/api/documents', { method: 'POST', body: formData })
-    const json = await res.json()
-    setUploading(false)
-
-    if (json.needs_manual_input || (json.document && json.parameters_count === 0)) {
-      setPendingFile(file)
-      setShowManual(true)
-      if (json.document) await loadAll(petId) // save doc but show manual form
-      setStatus({type:'info', text:'Не удалось извлечь показатели автоматически. Введи данные вручную.'})
-    } else if (json.error) {
-      setStatus({type:'error', text:'Ошибка: ' + json.error})
-    } else {
-      setStatus({type:'success', text:`Готово! Извлечено ${json.parameters_count} показателей`})
-      await loadAll(petId)
-    }
-    e.target.value = ''
-  }
-
-  async function submitManual() {
-    if (!petId || !manualText.trim()) return
-    setSubmittingManual(true)
-    const formData = new FormData()
-    formData.append('petId', petId)
-    formData.append('manual_text', manualText)
-    if (pendingFile) formData.append('file', pendingFile)
-
-    const res = await fetch('/api/documents', { method: 'POST', body: formData })
-    const json = await res.json()
-    setSubmittingManual(false)
-
-    if (json.error) {
-      setStatus({type:'error', text:'Ошибка: ' + json.error})
-    } else {
-      setStatus({type:'success', text:`Готово! Извлечено ${json.parameters_count} показателей`})
-      setShowManual(false)
-      setManualText('')
-      setPendingFile(null)
-      await loadAll(petId)
-    }
   }
 
   const categories = Array.from(new Set(labResults.map((r: any) => r.category)))
@@ -134,36 +145,45 @@ export default function DocumentsPage() {
         <h1 className="text-[20px] font-bold text-[#1C1C1E]">Документы</h1>
       </div>
 
-      <div className="px-3 mb-2">
-        <label className={cn('flex items-center justify-center gap-2 w-full rounded-[12px] py-3 text-[11px] font-bold cursor-pointer',
+      {/* Два действия */}
+      <div className="px-3 mb-3 grid grid-cols-2 gap-2">
+        {/* Кнопка загрузки PDF */}
+        <label className={cn('flex items-center justify-center gap-1.5 rounded-[12px] py-3 text-[10px] font-bold cursor-pointer',
           uploading ? 'bg-[#F2F2F7] text-[#8E8E93]' : 'bg-[#FD6220] text-white')}>
-          <Upload size={14} />
-          {uploading ? 'Читаю документ...' : 'Загрузить PDF или DOCX'}
-          <input type="file" accept="application/pdf,.pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="hidden" onChange={handleUpload} disabled={uploading} />
+          <FileText size={13} />
+          {uploading ? 'Загружаю...' : 'Загрузить PDF'}
+          <input type="file" accept=".pdf,.docx" className="hidden" onChange={handleUpload} disabled={uploading} />
         </label>
-        {status && (
-          <p className={cn('text-[9px] mt-1.5 px-1',
-            status.type === 'error' ? 'text-red-500' :
-            status.type === 'success' ? 'text-green-600' : 'text-[#FD6220] font-semibold')}>
-            {status.type === 'success' ? '✓ ' : status.type === 'info' ? 'ℹ ' : '✕ '}{status.text}
-          </p>
-        )}
+
+        {/* Кнопка ручного ввода */}
+        <button onClick={() => { setShowManual(!showManual); setManualStatus(null) }}
+          className="flex items-center justify-center gap-1.5 rounded-[12px] py-3 text-[10px] font-bold bg-white border border-[#FD6220] text-[#FD6220]">
+          <BarChart2 size={13} />
+          Внести результаты
+        </button>
       </div>
 
-      {/* Manual input form */}
+      {/* Статус загрузки */}
+      {uploadStatus && (
+        <div className="px-3 mb-2">
+          <p className={cn('text-[9px] px-1', uploadStatus.type === 'success' ? 'text-green-600' : 'text-red-500')}>
+            {uploadStatus.type === 'success' ? '✓ ' : '✕ '}{uploadStatus.text}
+          </p>
+        </div>
+      )}
+
+      {/* Форма ручного ввода результатов */}
       {showManual && (
         <div className="px-3 mb-3">
-          <div className="bg-white rounded-[13px] border border-[#FDD5C0] p-3">
+          <div className="bg-white rounded-[13px] border border-[#E5E5EA] p-3">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-[10px] font-bold text-[#FD6220]">Введите данные вручную</p>
+              <p className="text-[11px] font-bold text-[#1C1C1E]">Внести результаты анализов</p>
               <button onClick={() => { setShowManual(false); setManualText('') }}>
                 <X size={14} className="text-[#8E8E93]" />
               </button>
             </div>
-            <p className="text-[9px] text-[#8E8E93] mb-2 leading-relaxed">
-              Скопируй данные из документа или введи вручную. Формат:
-            </p>
             <div className="bg-[#F2F2F7] rounded-[8px] p-2 mb-2">
+              <p className="text-[9px] text-[#8E8E93] font-medium mb-1">Формат ввода:</p>
               <p className="text-[9px] font-mono text-[#3C3C43] leading-relaxed">
                 АЛТ: 95.9 U/l (норма 19-79)<br/>
                 Глюкоза: 4.9 mmol/l (норма 3.3-6.3)<br/>
@@ -171,17 +191,22 @@ export default function DocumentsPage() {
               </p>
             </div>
             <textarea value={manualText} onChange={e => setManualText(e.target.value)}
-              placeholder="Введите показатели из документа..." rows={5}
+              placeholder="Введи показатели из анализа..." rows={6}
               className="w-full border border-[#E5E5EA] rounded-[8px] p-2 text-[10px] font-medium resize-none outline-none focus:border-[#FD6220] mb-2" />
+            {manualStatus && (
+              <p className={cn('text-[9px] mb-2', manualStatus.type === 'success' ? 'text-green-600' : 'text-red-500')}>
+                {manualStatus.type === 'success' ? '✓ ' : '✕ '}{manualStatus.text}
+              </p>
+            )}
             <button onClick={submitManual} disabled={!manualText.trim() || submittingManual}
               className="w-full bg-[#FD6220] text-white font-bold rounded-[10px] py-2.5 text-[10px] disabled:opacity-50">
-              {submittingManual ? 'AI анализирует...' : 'Сохранить'}
+              {submittingManual ? 'AI анализирует...' : 'Сохранить в динамику'}
             </button>
           </div>
         </div>
       )}
 
-      {/* Tabs */}
+      {/* Табы */}
       <div className="px-3 mb-3">
         <div className="bg-white rounded-[10px] border border-[#E5E5EA] p-0.5 flex">
           <button onClick={() => { setTab('docs'); if(petId) loadAll(petId) }}
@@ -205,7 +230,7 @@ export default function DocumentsPage() {
             <div className="text-center py-12 text-[#8E8E93]">
               <p className="text-4xl mb-3">📋</p>
               <p className="text-sm font-medium">Документов пока нет</p>
-              <p className="text-[10px] mt-1">Загрузи PDF с анализами</p>
+              <p className="text-[10px] mt-1">Загрузи PDF или DOCX</p>
             </div>
           ) : (
             documents.map((doc: any) => (
@@ -248,6 +273,7 @@ export default function DocumentsPage() {
               <div className="text-center py-12 text-[#8E8E93]">
                 <p className="text-4xl mb-3">📊</p>
                 <p className="text-sm font-medium">Показателей пока нет</p>
+                <p className="text-[10px] mt-1">Нажми «Внести результаты» чтобы добавить</p>
               </div>
             ) : (
               <div className="flex flex-col gap-3">
@@ -277,7 +303,6 @@ export default function DocumentsPage() {
                             {hasAbnormal ? 'отклонение' : 'норма'}
                           </span>
                         </div>
-
                         {sorted.length === 1 ? (
                           <div className="flex items-center gap-3">
                             <div className="rounded-[10px] px-5 py-2.5 text-center flex-shrink-0"
@@ -297,9 +322,7 @@ export default function DocumentsPage() {
                               {sorted.map((v:any, i:number) => {
                                 const isLast = i === sorted.length - 1
                                 const barH = Math.max(8, Math.round((Number(v.value) / maxVal) * 52))
-                                const barColor = v.is_abnormal
-                                  ? (isLast ? '#FD6220' : '#FF9F6B')
-                                  : (isLast ? '#34C759' : '#6EE48A')
+                                const barColor = v.is_abnormal ? (isLast ? '#FD6220' : '#FF9F6B') : (isLast ? '#34C759' : '#6EE48A')
                                 return (
                                   <div key={i} className="flex flex-col items-center gap-1 flex-1">
                                     <span className="text-[12px] font-bold" style={{color: v.is_abnormal ? '#FD6220' : '#1A7F37'}}>

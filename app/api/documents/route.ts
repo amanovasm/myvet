@@ -26,6 +26,7 @@ export async function POST(req: NextRequest) {
     const petId = formData.get('petId') as string
     const file = formData.get('file') as File
     const manualText = formData.get('manual_text') as string | null
+    const storeOnly = formData.get('store_only') === 'true'
 
     if (!petId) return NextResponse.json({ error: 'petId required' }, { status: 400 })
 
@@ -60,6 +61,20 @@ export async function POST(req: NextRequest) {
         .from('medical-docs')
         .upload(fileName, buffer, { contentType: file.type || 'application/octet-stream' })
       fileUrl = fileName
+    }
+
+    // If store_only — just save the file, no parsing
+    if (storeOnly && file && file.size > 0) {
+      const docDate = new Date().toISOString().slice(0, 10)
+      const { data: doc } = await supabase.from('medical_documents').insert({
+        pet_id: petId,
+        document_type: 'other',
+        document_date: docDate,
+        title: file.name,
+        file_url: fileUrl,
+        raw_text: null,
+      }).select().single()
+      return NextResponse.json({ document: doc, parameters_count: 0 })
     }
 
     // If no text extracted, return special status asking for manual input
