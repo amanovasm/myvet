@@ -150,8 +150,16 @@ export default function DocumentsPage() {
     if (!fileUrl) { alert('Файл не загружен'); return }
     const res = await fetch(`/api/documents/view?docId=${docId}`)
     const json = await res.json()
-    if (json.url) window.open(json.url, '_blank')
-    else alert('Не удалось открыть файл')
+    if (!json.url) { alert('Не удалось открыть файл'); return }
+    
+    // DOCX — открываем через Google Docs Viewer
+    if (fileUrl.endsWith('.docx') || fileUrl.includes('.docx')) {
+      const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(json.url)}&embedded=true`
+      window.open(viewerUrl, '_blank')
+    } else {
+      // PDF — открываем напрямую
+      window.open(json.url, '_blank')
+    }
   }
 
   const categories = Array.from(new Set(labResults.map((r: any) => r.category)))
