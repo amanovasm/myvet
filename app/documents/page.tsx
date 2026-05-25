@@ -138,8 +138,8 @@ export default function DocumentsPage() {
         <label className={cn('flex items-center justify-center gap-2 w-full rounded-[12px] py-3 text-[11px] font-bold cursor-pointer',
           uploading ? 'bg-[#F2F2F7] text-[#8E8E93]' : 'bg-[#FD6220] text-white')}>
           <Upload size={14} />
-          {uploading ? 'Читаю PDF...' : 'Загрузить PDF'}
-          <input type="file" accept="application/pdf" className="hidden" onChange={handleUpload} disabled={uploading} />
+          {uploading ? 'Читаю документ...' : 'Загрузить PDF или DOCX'}
+          <input type="file" accept="application/pdf,.pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="hidden" onChange={handleUpload} disabled={uploading} />
         </label>
         {status && (
           <p className={cn('text-[9px] mt-1.5 px-1',

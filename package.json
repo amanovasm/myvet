@@ -18,7 +18,8 @@
     "clsx": "^2.1.1",
     "tailwind-merge": "^2.3.0",
     "lucide-react": "^0.383.0",
-    "pdf-parse": "^1.1.1"
+    "pdf-parse": "^1.1.1",
+    "mammoth": "^1.7.0"
   },
   "devDependencies": {
     "typescript": "^5",

@@ -36,15 +36,21 @@ export async function POST(req: NextRequest) {
       const arrayBuffer = await file.arrayBuffer()
       const buffer = Buffer.from(arrayBuffer)
 
-      // Try pdf-parse first
-      try {
-        const pdfParse = require('pdf-parse')
-        const pdfData = await pdfParse(buffer)
-        if (pdfData.text && pdfData.text.trim().length > 50) {
-          pdfText = pdfData.text
-        }
-      } catch (e) {
-        console.log('pdf-parse failed, will use manual text if provided')
+      const isDocx = file.name.endsWith('.docx')
+      const isPdf = file.name.endsWith('.pdf') || !isDocx
+
+      if (isDocx) {
+        try {
+          const mammoth = require('mammoth')
+          const result = await mammoth.extractRawText({ buffer })
+          if (result.value && result.value.trim().length > 50) pdfText = result.value
+        } catch (e) { console.log('mammoth failed:', e) }
+      } else if (isPdf) {
+        try {
+          const pdfParse = require('pdf-parse')
+          const pdfData = await pdfParse(buffer)
+          if (pdfData.text && pdfData.text.trim().length > 50) pdfText = pdfData.text
+        } catch (e) { console.log('pdf-parse failed:', e) }
       }
 
       // Upload to storage
@@ -52,8 +58,8 @@ export async function POST(req: NextRequest) {
       const fileName = `${petId}/${Date.now()}_${sanitizedName}`
       const { error: uploadError } = await supabase.storage
         .from('medical-docs')
-        .upload(fileName, buffer, { contentType: 'application/pdf' })
-      fileUrl = fileName // always save path, file is in storage
+        .upload(fileName, buffer, { contentType: file.type || 'application/octet-stream' })
+      fileUrl = fileName
     }
 
     // If no text extracted, return special status asking for manual input
