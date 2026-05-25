@@ -6,13 +6,14 @@ interface PetContextType {
   pets: any[]
   activePet: any | null
   activePetId: string | null
+  petId: string | null  // alias for activePetId
   setActivePetId: (id: string) => void
   loading: boolean
   refetch: () => void
 }
 
 const PetContext = createContext<PetContextType>({
-  pets: [], activePet: null, activePetId: null,
+  pets: [], activePet: null, activePetId: null, petId: null,
   setActivePetId: () => {}, loading: true, refetch: () => {}
 })
 
@@ -51,7 +52,7 @@ export function PetProvider({ children }: { children: ReactNode }) {
   const activePet = pets.find(p => p.id === activePetId) || null
 
   return (
-    <PetContext.Provider value={{ pets, activePet, activePetId, setActivePetId, loading, refetch: load }}>
+    <PetContext.Provider value={{ pets, activePet, activePetId, petId: activePetId, setActivePetId, loading, refetch: load }}>
       {children}
     </PetContext.Provider>
   )
