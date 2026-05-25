@@ -180,12 +180,12 @@ export default function DocumentsPage() {
       {/* Tabs */}
       <div className="px-3 mb-3">
         <div className="bg-white rounded-[10px] border border-[#E5E5EA] p-0.5 flex">
-          <button onClick={() => setTab('docs')}
+          <button onClick={() => { setTab('docs'); if(petId) loadAll(petId) }}
             className={cn('flex-1 rounded-[8px] py-1.5 text-[9px] font-bold',
               tab === 'docs' ? 'bg-[#FD6220] text-white' : 'text-[#8E8E93]')}>
             Документы ({documents.length})
           </button>
-          <button onClick={() => setTab('dynamics')}
+          <button onClick={() => { setTab('dynamics'); if(petId) loadAll(petId) }}
             className={cn('flex-1 rounded-[8px] py-1.5 text-[9px] font-bold',
               tab === 'dynamics' ? 'bg-[#FD6220] text-white' : 'text-[#8E8E93]')}>
             Динамика ({labResults.length})
