@@ -171,7 +171,7 @@ export default function DocumentsPage() {
   })
 
   return (
-    <div className="min-h-screen bg-[#F2F2F7] flex flex-col pb-16">
+    <div className="min-h-screen bg-[#F2F2F7] flex flex-col pt-[52px] pb-[72px]">
       <div className="bg-white"><TopBar /></div>
 
       <div className="px-3 pt-3 pb-2">

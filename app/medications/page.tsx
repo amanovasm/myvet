@@ -97,7 +97,7 @@ export default function MedicationsPage() {
   const sortedTimes = Object.keys(doses).sort()
 
   return (
-    <div className="min-h-screen bg-[#F2F2F7] flex flex-col pb-16">
+    <div className="min-h-screen bg-[#F2F2F7] flex flex-col pt-[52px] pb-[72px]">
       <div className="bg-white"><TopBar /></div>
 
       <div className="bg-white px-3 py-2 border-b border-[#F2F2F7]">

@@ -126,7 +126,7 @@ function EventsContent() {
 
 export default function EventsPage() {
   return (
-    <div className="min-h-screen bg-[#F2F2F7] flex flex-col pb-16">
+    <div className="min-h-screen bg-[#F2F2F7] flex flex-col pt-[52px] pb-[72px]">
       <div className="bg-white"><TopBar /></div>
       <Suspense fallback={<p className="text-center text-[#8E8E93] text-sm py-8">Загружаем...</p>}>
         <EventsContent />

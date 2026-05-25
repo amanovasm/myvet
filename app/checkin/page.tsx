@@ -141,7 +141,7 @@ export default function CheckinPage() {
   const selectedLabel = format(new Date(selectedDate+'T12:00:00'),'EEEE, d MMMM',{locale:ru})
 
   return (
-    <div className="min-h-screen bg-[#F2F2F7] flex flex-col pb-16">
+    <div className="min-h-screen bg-[#F2F2F7] flex flex-col pt-[52px] pb-[72px]">
       <div className="bg-white"><TopBar /></div>
 
       {/* Недельный скроллер */}
