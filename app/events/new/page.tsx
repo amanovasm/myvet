@@ -47,7 +47,7 @@ export default function NewEventPage() {
   const selectedType = EVENT_TYPES.find(t => t.key === eventType)
 
   useEffect(() => {
-    supabase.from('pets').select('id,name').limit(1).single().then(({ data }) => {
+    supabase.from('pets').select('id,name').not('user_id', 'is', null).limit(1).single().then(({ data }) => {
       if (data) { setPetId(data.id); setPetName(data.name) }
     })
   }, [])

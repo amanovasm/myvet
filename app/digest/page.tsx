@@ -13,7 +13,7 @@ export default function DigestPage() {
   const [petId, setPetId] = useState<string | null>(null)
 
   useEffect(() => {
-    supabase.from('pets').select('id').limit(1).single().then(({ data }) => {
+    supabase.from('pets').select('id').not('user_id', 'is', null).limit(1).single().then(({ data }) => {
       if (!data) { setLoading(false); return }
       setPetId(data.id)
       load(data.id)

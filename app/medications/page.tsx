@@ -32,7 +32,7 @@ export default function MedicationsPage() {
   })
 
   useEffect(() => {
-    supabase.from('pets').select('id').limit(1).single().then(({ data }) => {
+    supabase.from('pets').select('id').not('user_id', 'is', null).limit(1).single().then(({ data }) => {
       if (data) { setPetId(data.id); loadDoses(data.id, format(new Date(), 'yyyy-MM-dd')) }
       else setLoading(false)
     })
