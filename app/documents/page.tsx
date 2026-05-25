@@ -232,68 +232,89 @@ export default function DocumentsPage() {
                 <p className="text-sm font-medium">Показателей пока нет</p>
               </div>
             ) : (
-              (() => {
-                const allDates = Array.from(new Set(filteredResults.map((r: any) => r.document_date))).sort() as string[]
-                const params = Object.entries(byParam)
-                return (
-                  <div className="bg-white rounded-[13px] border border-[#E5E5EA] overflow-x-auto">
-                    <table className="w-full min-w-full">
-                      <thead>
-                        <tr style={{background:'#F9F9F9'}}>
-                          <th className="text-[8px] font-bold text-[#8E8E93] p-2 text-left border-b border-[#F2F2F7] min-w-[110px]">Показатель</th>
-                          {allDates.map(date => (
-                            <th key={date} className="text-[8px] font-bold text-[#8E8E93] p-2 text-center border-b border-l border-[#F2F2F7] min-w-[60px]">
-                              {format(new Date(date + 'T12:00:00'), 'dd.MM.yy')}
-                            </th>
-                          ))}
-                          <th className="text-[8px] font-bold text-[#8E8E93] p-2 text-center border-b border-l border-[#F2F2F7] min-w-[80px]">Норма</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {params.map(([key, values], idx) => {
-                          const latest = (values as any[])[values.length - 1]
-                          const byDate: Record<string, any> = {}
-                          ;(values as any[]).forEach((v: any) => { byDate[v.document_date] = v })
-                          const hasAbnormal = (values as any[]).some((v: any) => v.is_abnormal)
-                          return (
-                            <tr key={key} className={idx % 2 === 0 ? '' : 'bg-[#FAFAFA]'}>
-                              <td className="p-2 border-b border-[#F2F2F7]">
-                                <div className="flex items-center gap-1">
-                                  {hasAbnormal
-                                    ? <AlertCircle size={9} className="text-red-500 flex-shrink-0" />
-                                    : <CheckCircle size={9} className="text-green-500 flex-shrink-0" />}
-                                  <span className="text-[9px] font-semibold text-[#1C1C1E] leading-tight">{latest.parameter_name}</span>
-                                </div>
-                              </td>
-                              {allDates.map(date => {
-                                const v = byDate[date]
+              <div className="flex flex-col gap-3">
+                {Object.entries(byParam).map(([key, values]) => {
+                  const sorted = [...(values as any[])].sort((a,b) => a.document_date.localeCompare(b.document_date))
+                  const latest = sorted[sorted.length - 1]
+                  const hasAbnormal = sorted.some((v:any) => v.is_abnormal)
+                  const maxVal = Math.max(...sorted.map((v:any) => Number(v.value) || 0), Number(latest.ref_max) || 0) * 1.2 || 1
+
+                  return (
+                    <div key={key} className="bg-white rounded-[13px] border border-[#E5E5EA] overflow-hidden">
+                      <div style={{height: '3px', background: hasAbnormal ? '#FD6220' : '#34C759'}} />
+                      <div className="p-[14px]">
+                        <div className="flex items-start justify-between gap-2 mb-3">
+                          <div>
+                            <p className="text-[14px] font-bold text-[#1C1C1E] leading-tight">{latest.parameter_name}</p>
+                            <p className="text-[11px] text-[#8E8E93] mt-0.5 font-medium">
+                              {latest.unit}{latest.ref_min !== null && latest.ref_max !== null ? ` · норма ${latest.ref_min}–${latest.ref_max}` : ''}
+                            </p>
+                          </div>
+                          <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full flex-shrink-0"
+                            style={{
+                              background: hasAbnormal ? '#FFF4EF' : '#F0FFF4',
+                              color: hasAbnormal ? '#FD6220' : '#1A7F37',
+                              border: `1px solid ${hasAbnormal ? '#FDD5C0' : '#A3E6B8'}`,
+                            }}>
+                            {hasAbnormal ? 'отклонение' : 'норма'}
+                          </span>
+                        </div>
+
+                        {sorted.length === 1 ? (
+                          <div className="flex items-center gap-3">
+                            <div className="rounded-[10px] px-5 py-2.5 text-center flex-shrink-0"
+                              style={{background: hasAbnormal ? '#FFF4EF' : '#F0FFF4', border: `1px solid ${hasAbnormal ? '#FDD5C0' : '#A3E6B8'}`}}>
+                              <p className="text-[26px] font-bold m-0" style={{color: hasAbnormal ? '#FD6220' : '#1A7F37'}}>
+                                {sorted[0].value ?? sorted[0].value_text ?? '—'}
+                              </p>
+                              <p className="text-[10px] font-semibold text-[#8E8E93] mt-0.5">
+                                {format(new Date(sorted[0].document_date + 'T12:00:00'), 'dd.MM.yy')}
+                              </p>
+                            </div>
+                            <p className="text-[11px] font-medium text-[#8E8E93] flex-1 leading-relaxed">Добавь ещё анализы чтобы видеть динамику</p>
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="flex items-end gap-2.5" style={{height: '64px'}}>
+                              {sorted.map((v:any, i:number) => {
+                                const isLast = i === sorted.length - 1
+                                const barH = Math.max(8, Math.round((Number(v.value) / maxVal) * 52))
+                                const barColor = v.is_abnormal
+                                  ? (isLast ? '#FD6220' : '#FF9F6B')
+                                  : (isLast ? '#34C759' : '#6EE48A')
                                 return (
-                                  <td key={date} className="p-2 text-center border-b border-l border-[#F2F2F7]">
-                                    {v ? (
-                                      <span className={cn('text-[11px] font-bold', v.is_abnormal ? 'text-red-500' : 'text-[#1C1C1E]')}>
-                                        {v.value ?? v.value_text ?? '—'}
-                                      </span>
-                                    ) : (
-                                      <span className="text-[10px] text-[#C7C7CC]">—</span>
-                                    )}
-                                  </td>
+                                  <div key={i} className="flex flex-col items-center gap-1 flex-1">
+                                    <span className="text-[12px] font-bold" style={{color: v.is_abnormal ? '#FD6220' : '#1A7F37'}}>
+                                      {v.value ?? '—'}
+                                    </span>
+                                    <div className="w-full rounded-t-[4px]" style={{height: `${barH}px`, background: barColor}} />
+                                  </div>
                                 )
                               })}
-                              <td className="p-2 text-center border-b border-l border-[#F2F2F7]">
-                                {(latest.ref_min !== null || latest.ref_max !== null) ? (
-                                  <span className="text-[7px] text-[#8E8E93] whitespace-nowrap">{latest.ref_min ?? '?'}–{latest.ref_max ?? '?'} {latest.unit}</span>
-                                ) : (
-                                  <span className="text-[7px] text-[#C7C7CC]">—</span>
-                                )}
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )
-              })()
+                            </div>
+                            <div className="flex gap-2.5 mt-1 mb-2.5">
+                              {sorted.map((v:any, i:number) => (
+                                <div key={i} className="flex-1 text-center">
+                                  <span className="text-[10px] font-semibold text-[#8E8E93]">
+                                    {format(new Date(v.document_date + 'T12:00:00'), 'dd.MM.yy')}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                            {latest.ref_max !== null && (
+                              <div className="pt-2" style={{borderTop: `1px dashed ${hasAbnormal ? '#FDD5C0' : '#A3E6B8'}`}}>
+                                <span className="text-[10px] font-medium" style={{color: hasAbnormal ? '#FD6220' : '#1A7F37'}}>
+                                  — верхняя граница нормы: {latest.ref_max} {latest.unit}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             )}
           </>
         )}
