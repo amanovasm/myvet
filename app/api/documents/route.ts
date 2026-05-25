@@ -48,7 +48,8 @@ export async function POST(req: NextRequest) {
       }
 
       // Upload to storage
-      const fileName = `${petId}/${Date.now()}_${file.name}`
+      const sanitizedName = file.name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._-]/g, '_')
+      const fileName = `${petId}/${Date.now()}_${sanitizedName}`
       const { error: uploadError } = await supabase.storage
         .from('medical-docs')
         .upload(fileName, buffer, { contentType: 'application/pdf' })
