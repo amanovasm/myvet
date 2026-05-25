@@ -6,7 +6,7 @@ import { ru } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 import TopBar from '@/components/TopBar'
 import BottomNav from '@/components/BottomNav'
-import { Upload, AlertCircle, CheckCircle, X } from 'lucide-react'
+import { Upload, AlertCircle, CheckCircle, X, FileText, ExternalLink } from 'lucide-react'
 
 const DOC_TYPE_LABEL: Record<string, string> = {
   oac: 'ОАК', biochemistry: 'Биохимия', urinalysis: 'Анализ мочи',
@@ -54,6 +54,14 @@ export default function DocumentsPage() {
     setDocuments((await docsRes.json()).documents || [])
     setLabResults((await labRes.json()).results || [])
     setLoading(false)
+  }
+
+  async function openDoc(docId: string, fileUrl: string | null) {
+    if (!fileUrl) { alert('Файл не загружен в хранилище'); return }
+    const res = await fetch(`/api/documents/view?docId=${docId}`)
+    const json = await res.json()
+    if (json.url) window.open(json.url, '_blank')
+    else alert('Не удалось открыть файл')
   }
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -209,6 +217,12 @@ export default function DocumentsPage() {
                       {format(new Date(doc.document_date + 'T12:00:00'), 'd MMMM yyyy', { locale: ru })}
                     </p>
                   </div>
+                  {doc.file_url && (
+                    <button onClick={() => openDoc(doc.id, doc.file_url)}
+                      className="w-7 h-7 rounded-[8px] bg-[#FFF4EF] flex items-center justify-center flex-shrink-0">
+                      <ExternalLink size={13} className="text-[#FD6220]" />
+                    </button>
+                  )}
                 </div>
               </div>
             ))
