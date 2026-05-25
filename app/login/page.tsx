@@ -1,18 +1,41 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useRouter } from 'next/navigation'
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState('')
   const [emailSent, setEmailSent] = useState(false)
   const [error, setError] = useState('')
+  const router = useRouter()
+
+  useEffect(() => {
+    // If already logged in, redirect to home
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) router.push('/')
+    })
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session) router.push('/')
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
 
   async function signInWithGoogle() {
     setLoading(true)
+    setError('')
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        redirectTo: `${window.location.origin}/`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
     })
     if (error) { setError(error.message); setLoading(false) }
   }
@@ -22,7 +45,7 @@ export default function LoginPage() {
     setLoading(true)
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: { emailRedirectTo: `${window.location.origin}/` },
     })
     if (error) { setError(error.message); setLoading(false) }
     else { setEmailSent(true); setLoading(false) }
@@ -31,7 +54,7 @@ export default function LoginPage() {
   if (emailSent) return (
     <div className="min-h-screen bg-[#F2F2F7] flex items-center justify-center p-6">
       <div className="bg-white rounded-[20px] p-8 w-full max-w-sm text-center">
-        <div className="w-14 h-14 rounded-full bg-[#FFF4EF] flex items-center justify-center mx-auto mb-4 text-2xl">📧</div>
+        <div className="text-4xl mb-4">📧</div>
         <h2 className="text-[18px] font-bold text-[#1C1C1E] mb-2">Письмо отправлено!</h2>
         <p className="text-[13px] text-[#8E8E93] mb-1">Открой письмо на</p>
         <p className="text-[14px] font-bold text-[#FD6220] mb-4">{email}</p>
@@ -76,7 +99,7 @@ export default function LoginPage() {
             className="w-full bg-[#F2F2F7] text-[#1C1C1E] font-semibold rounded-[12px] py-3 text-[13px] disabled:opacity-50">
             Получить ссылку на почту
           </button>
-          <p className="text-[11px] text-[#8E8E93] text-center mt-4 leading-relaxed">
+          <p className="text-[11px] text-[#8E8E93] text-center mt-4">
             Регистрация происходит автоматически при первом входе
           </p>
         </div>

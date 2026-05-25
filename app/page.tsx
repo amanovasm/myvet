@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
@@ -21,6 +22,14 @@ const DIR_DOT: Record<string, string> = {
 }
 
 export default function Dashboard() {
+  const router = useRouter()
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (!data.session) window.location.href = '/login'
+    })
+  }, [])
+
   const [loading, setLoading] = useState(true)
   const [pet, setPet] = useState<any>(null)
   const [checkin, setCheckin] = useState<any>(null)
