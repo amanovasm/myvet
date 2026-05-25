@@ -80,14 +80,9 @@ export default function CheckinPage() {
   }, [])
 
   useEffect(()=>{
-    ;(async()=>{
-      const {data:{user}} = await supabase.auth.getUser()
-      if (!user){window.location.href='/login';return}
-      const {data} = await supabase.from('pets').select('id').eq('user_id',user.id).limit(1).single()
-      if (data){setPetId(data.id);loadCheckin(data.id,today)}
-      else setLoading(false)
-    })()
-  },[loadCheckin, today])
+    if (petId) loadCheckin(petId, today)
+    else setLoading(false)
+  },[petId, loadCheckin, today])
 
   function changeDate(d:string){
     setSelectedDate(d)
