@@ -171,25 +171,6 @@ export default function DocumentsPage() {
         <h1 className="text-[20px] font-bold text-[#1C1C1E]">Документы</h1>
       </div>
 
-      {/* Два действия */}
-      <div className="px-3 mb-3 grid grid-cols-2 gap-2">
-        <label className={cn('flex items-center justify-center gap-1.5 rounded-[12px] py-3 text-[10px] font-bold cursor-pointer border',
-          uploading ? 'bg-[#F2F2F7] text-[#8E8E93] border-[#E5E5EA]' : 'bg-white text-[#FD6220] border-[#FD6220]')}>
-          📎 {uploading ? 'Загружаю...' : 'Загрузить PDF'}
-          <input type="file" accept=".pdf,.docx" className="hidden" onChange={handleUpload} disabled={uploading} />
-        </label>
-        <button onClick={() => { setShowEntry(!showEntry); setEntry(emptyEntry()); setSaveError('') }}
-          className="flex items-center justify-center gap-1.5 rounded-[12px] py-3 text-[10px] font-bold bg-[#FD6220] text-white">
-          <Plus size={13} /> Добавить показатель
-        </button>
-      </div>
-
-      {uploadStatus && (
-        <p className={cn('text-[9px] px-4 mb-2', uploadStatus.startsWith('error') ? 'text-red-500' : 'text-green-600')}>
-          {uploadStatus.startsWith('error') ? '✕ ' + uploadStatus.slice(6) : '✓ Документ сохранён'}
-        </p>
-      )}
-
       {/* Форма добавления показателя */}
       {showEntry && (
         <div className="px-3 mb-3">
@@ -312,8 +293,19 @@ export default function DocumentsPage() {
         {loading ? (
           <p className="text-center text-[#8E8E93] text-sm py-8">Загружаем...</p>
         ) : tab === 'docs' ? (
-          documents.length === 0 ? (
-            <div className="text-center py-12 text-[#8E8E93]">
+          <>
+            <label className={cn('flex items-center justify-center gap-2 w-full rounded-[12px] py-3 text-[11px] font-bold cursor-pointer mb-1',
+              uploading ? 'bg-[#F2F2F7] text-[#8E8E93]' : 'bg-[#FD6220] text-white')}>
+              📎 {uploading ? 'Загружаю...' : 'Загрузить PDF или DOCX'}
+              <input type="file" accept=".pdf,.docx" className="hidden" onChange={handleUpload} disabled={uploading} />
+            </label>
+            {uploadStatus && (
+              <p className={cn('text-[9px] px-1 mb-1', uploadStatus.startsWith('error') ? 'text-red-500' : 'text-green-600')}>
+                {uploadStatus.startsWith('error') ? '✕ ' + uploadStatus.slice(6) : '✓ Документ сохранён'}
+              </p>
+            )}
+            {documents.length === 0 ? (
+            <div className="text-center py-10 text-[#8E8E93]">
               <p className="text-4xl mb-3">📋</p>
               <p className="text-sm font-medium">Документов пока нет</p>
             </div>
@@ -340,7 +332,8 @@ export default function DocumentsPage() {
                 </div>
               </div>
             ))
-          )
+          )}
+          </>
         ) : (
           <>
             {categories.length > 1 && (
@@ -354,11 +347,14 @@ export default function DocumentsPage() {
                 ))}
               </div>
             )}
+            <button onClick={() => { setShowEntry(!showEntry); setEntry(emptyEntry()); setSaveError('') }}
+              className="flex items-center justify-center gap-2 w-full bg-[#FD6220] text-white font-bold rounded-[12px] py-3 text-[11px] mb-1">
+              <Plus size={14} /> Добавить показатель
+            </button>
             {Object.entries(byParam).length === 0 ? (
-              <div className="text-center py-12 text-[#8E8E93]">
+              <div className="text-center py-10 text-[#8E8E93]">
                 <p className="text-4xl mb-3">📊</p>
                 <p className="text-sm font-medium">Показателей пока нет</p>
-                <p className="text-[10px] mt-1">Нажми «Добавить показатель»</p>
               </div>
             ) : (
               <div className="flex flex-col gap-3">
