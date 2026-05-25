@@ -47,9 +47,14 @@ export default function NewEventPage() {
   const selectedType = EVENT_TYPES.find(t => t.key === eventType)
 
   useEffect(() => {
-    supabase.from('pets').select('id,name').eq('user_id', (await supabase.auth.getUser()).data.user?.id ?? '').limit(1).single().then(({ data }) => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { window.location.href = '/login'; return }
+      const userId = user.id
+      supabase.from('pets').select('id,name').eq('user_id', userId).limit(1).single().then(({ data }) => {
       if (data) { setPetId(data.id); setPetName(data.name) }
     })
+    })()
   }, [])
 
   async function save() {

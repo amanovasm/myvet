@@ -32,10 +32,15 @@ export default function MedicationsPage() {
   })
 
   useEffect(() => {
-    supabase.from('pets').select('id').eq('user_id', (await supabase.auth.getUser()).data.user?.id ?? '').limit(1).single().then(({ data }) => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { window.location.href = '/login'; return }
+      const userId = user.id
+      supabase.from('pets').select('id').eq('user_id', userId).limit(1).single().then(({ data }) => {
       if (data) { setPetId(data.id); loadDoses(data.id, format(new Date(), 'yyyy-MM-dd')) }
       else setLoading(false)
     })
+    })()
   }, [])
 
   async function loadDoses(pid: string, date: string) {

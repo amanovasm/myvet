@@ -61,10 +61,15 @@ export default function DocumentsPage() {
   const [saveError, setSaveError] = useState('')
 
   useEffect(() => {
-    supabase.from('pets').select('id').eq('user_id', (await supabase.auth.getUser()).data.user?.id ?? '').limit(1).single().then(({ data }) => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { window.location.href = '/login'; return }
+      const userId = user.id
+      supabase.from('pets').select('id').eq('user_id', userId).limit(1).single().then(({ data }) => {
       if (data) { setPetId(data.id); loadAll(data.id) }
       else setLoading(false)
     })
+    })()
   }, [])
 
   async function loadAll(pid: string) {

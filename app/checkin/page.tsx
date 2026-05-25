@@ -79,7 +79,7 @@ export default function CheckinPage() {
   }, [])
 
   useEffect(()=>{
-    supabase.from('pets').select('id').eq('user_id', (await supabase.auth.getUser()).data.user?.id ?? '').limit(1).single().then(({data})=>{
+    supabase.from('pets').select('id').eq('user_id', userId).limit(1).single().then(({data})=>{
       if (data) { setPetId(data.id); loadCheckin(data.id, today) }
       else setLoading(false)
     })
