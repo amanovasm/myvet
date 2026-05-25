@@ -6,7 +6,7 @@ import { ru } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 import TopBar from '@/components/TopBar'
 import BottomNav from '@/components/BottomNav'
-import { Upload, AlertCircle, CheckCircle, ExternalLink, Plus, X, FileText, BarChart2 } from 'lucide-react'
+import { ExternalLink, Plus, X, Check } from 'lucide-react'
 
 const DOC_TYPE_LABEL: Record<string, string> = {
   oac: 'ОАК', biochemistry: 'Биохимия', urinalysis: 'Анализ мочи',
@@ -23,23 +23,42 @@ const DOC_TYPE_COLOR: Record<string, string> = {
   other: 'bg-gray-50 text-gray-600 border-gray-200',
 }
 
+interface LabEntry {
+  mode: 'existing' | 'new' | null
+  paramKey: string
+  paramName: string
+  paramUnit: string
+  refMin: string
+  refMax: string
+  value: string
+  date: string
+  saved: boolean
+}
+
+const emptyEntry = (): LabEntry => ({
+  mode: null, paramKey: '', paramName: '', paramUnit: '',
+  refMin: '', refMax: '', value: '',
+  date: format(new Date(), 'yyyy-MM-dd'), saved: false,
+})
+
 export default function DocumentsPage() {
   const [petId, setPetId] = useState<string | null>(null)
   const [documents, setDocuments] = useState<any[]>([])
   const [labResults, setLabResults] = useState<any[]>([])
+  const [existingParams, setExistingParams] = useState<any[]>([]) // unique params already in DB
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'docs' | 'dynamics'>('docs')
   const [selectedCategory, setSelectedCategory] = useState('all')
 
-  // PDF upload state
+  // PDF upload
   const [uploading, setUploading] = useState(false)
-  const [uploadStatus, setUploadStatus] = useState<{type: 'error'|'success', text: string} | null>(null)
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null)
 
-  // Manual entry state
-  const [showManual, setShowManual] = useState(false)
-  const [manualText, setManualText] = useState('')
-  const [submittingManual, setSubmittingManual] = useState(false)
-  const [manualStatus, setManualStatus] = useState<{type: 'error'|'success', text: string} | null>(null)
+  // Lab entry
+  const [showEntry, setShowEntry] = useState(false)
+  const [entry, setEntry] = useState<LabEntry>(emptyEntry())
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   useEffect(() => {
     supabase.from('pets').select('id').limit(1).single().then(({ data }) => {
@@ -54,74 +73,81 @@ export default function DocumentsPage() {
       fetch(`/api/documents?petId=${pid}&_t=${Date.now()}`),
       fetch(`/api/lab-results?petId=${pid}&_t=${Date.now()}`),
     ])
-    setDocuments((await docsRes.json()).documents || [])
-    setLabResults((await labRes.json()).results || [])
+    const docs = (await docsRes.json()).documents || []
+    const results = (await labRes.json()).results || []
+    setDocuments(docs)
+    setLabResults(results)
+    // Уникальные существующие показатели
+    const seen = new Set()
+    const uniq = results.filter((r: any) => {
+      if (seen.has(r.parameter_key)) return false
+      seen.add(r.parameter_key); return true
+    })
+    setExistingParams(uniq)
     setLoading(false)
   }
 
-  // Флоу 1: Загрузить PDF — только сохраняет файл, без парсинга
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file || !petId) return
-    if (!file.name.endsWith('.pdf') && !file.name.endsWith('.docx')) {
-      setUploadStatus({ type: 'error', text: 'Поддерживаются PDF и DOCX' })
-      return
-    }
-    setUploading(true)
-    setUploadStatus(null)
-
-    const sanitizedName = file.name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._-]/g, '_')
-    const fileName = `${petId}/${Date.now()}_${sanitizedName}`
-    const arrayBuffer = await file.arrayBuffer()
-    const buffer = Buffer.from ? Buffer.from(arrayBuffer) : new Uint8Array(arrayBuffer)
-
-    // Upload directly to storage + save doc record via API
+    setUploading(true); setUploadStatus(null)
     const formData = new FormData()
     formData.append('petId', petId)
     formData.append('file', file)
-    formData.append('store_only', 'true') // new flag: just store, don't parse
-
+    formData.append('store_only', 'true')
     const res = await fetch('/api/documents', { method: 'POST', body: formData })
     const json = await res.json()
-
-    if (json.error) {
-      setUploadStatus({ type: 'error', text: 'Ошибка: ' + json.error })
-    } else {
-      setUploadStatus({ type: 'success', text: 'Документ сохранён' })
-      await loadAll(petId)
-    }
     setUploading(false)
+    if (json.error) setUploadStatus('error:' + json.error)
+    else { setUploadStatus('success'); await loadAll(petId) }
     e.target.value = ''
   }
 
-  // Флоу 2: Внести результаты вручную → в динамику
-  async function submitManual() {
-    if (!petId || !manualText.trim()) return
-    setSubmittingManual(true)
-    setManualStatus(null)
+  function selectExisting(param: any) {
+    setEntry(prev => ({
+      ...prev, mode: 'existing',
+      paramKey: param.parameter_key,
+      paramName: param.parameter_name,
+      paramUnit: param.unit || '',
+      refMin: String(param.ref_min ?? ''),
+      refMax: String(param.ref_max ?? ''),
+    }))
+  }
 
-    const formData = new FormData()
-    formData.append('petId', petId)
-    formData.append('manual_text', manualText)
+  async function saveEntry() {
+    if (!petId || !entry.value || !entry.date) { setSaveError('Заполни значение и дату'); return }
+    if (entry.mode === 'new' && !entry.paramName) { setSaveError('Введи название показателя'); return }
+    setSaving(true); setSaveError('')
 
-    const res = await fetch('/api/documents', { method: 'POST', body: formData })
-    const json = await res.json()
+    const key = entry.mode === 'existing' ? entry.paramKey : entry.paramName.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
+    const isAbnormal = entry.refMin && entry.refMax
+      ? Number(entry.value) < Number(entry.refMin) || Number(entry.value) > Number(entry.refMax)
+      : false
 
-    if (json.error) {
-      setManualStatus({ type: 'error', text: 'Ошибка: ' + json.error })
-    } else if (json.parameters_count === 0) {
-      setManualStatus({ type: 'error', text: 'Не удалось распознать показатели. Проверь формат.' })
-    } else {
-      setManualStatus({ type: 'success', text: `Сохранено! Добавлено ${json.parameters_count} показателей` })
-      setManualText('')
-      setTimeout(() => { setShowManual(false); setManualStatus(null) }, 2000)
-      await loadAll(petId)
-    }
-    setSubmittingManual(false)
+    const { error } = await supabase.from('lab_results').insert({
+      pet_id: petId,
+      document_id: null,
+      document_date: entry.date,
+      category: 'manual',
+      parameter_name: entry.paramName,
+      parameter_key: key,
+      value: Number(entry.value),
+      unit: entry.paramUnit || null,
+      ref_min: entry.refMin ? Number(entry.refMin) : null,
+      ref_max: entry.refMax ? Number(entry.refMax) : null,
+      is_abnormal: isAbnormal,
+    })
+
+    setSaving(false)
+    if (error) { setSaveError(error.message); return }
+
+    // Показатель сохранён — сбрасываем для следующего
+    setEntry(prev => ({ ...emptyEntry(), saved: false }))
+    await loadAll(petId)
   }
 
   async function openDoc(docId: string, fileUrl: string | null) {
-    if (!fileUrl) { alert('Файл не загружен в хранилище'); return }
+    if (!fileUrl) { alert('Файл не загружен'); return }
     const res = await fetch(`/api/documents/view?docId=${docId}`)
     const json = await res.json()
     if (json.url) window.open(json.url, '_blank')
@@ -147,61 +173,123 @@ export default function DocumentsPage() {
 
       {/* Два действия */}
       <div className="px-3 mb-3 grid grid-cols-2 gap-2">
-        {/* Кнопка загрузки PDF */}
-        <label className={cn('flex items-center justify-center gap-1.5 rounded-[12px] py-3 text-[10px] font-bold cursor-pointer',
-          uploading ? 'bg-[#F2F2F7] text-[#8E8E93]' : 'bg-[#FD6220] text-white')}>
-          <FileText size={13} />
-          {uploading ? 'Загружаю...' : 'Загрузить PDF'}
+        <label className={cn('flex items-center justify-center gap-1.5 rounded-[12px] py-3 text-[10px] font-bold cursor-pointer border',
+          uploading ? 'bg-[#F2F2F7] text-[#8E8E93] border-[#E5E5EA]' : 'bg-white text-[#FD6220] border-[#FD6220]')}>
+          📎 {uploading ? 'Загружаю...' : 'Загрузить PDF'}
           <input type="file" accept=".pdf,.docx" className="hidden" onChange={handleUpload} disabled={uploading} />
         </label>
-
-        {/* Кнопка ручного ввода */}
-        <button onClick={() => { setShowManual(!showManual); setManualStatus(null) }}
-          className="flex items-center justify-center gap-1.5 rounded-[12px] py-3 text-[10px] font-bold bg-white border border-[#FD6220] text-[#FD6220]">
-          <BarChart2 size={13} />
-          Внести результаты
+        <button onClick={() => { setShowEntry(!showEntry); setEntry(emptyEntry()); setSaveError('') }}
+          className="flex items-center justify-center gap-1.5 rounded-[12px] py-3 text-[10px] font-bold bg-[#FD6220] text-white">
+          <Plus size={13} /> Добавить показатель
         </button>
       </div>
 
-      {/* Статус загрузки */}
       {uploadStatus && (
-        <div className="px-3 mb-2">
-          <p className={cn('text-[9px] px-1', uploadStatus.type === 'success' ? 'text-green-600' : 'text-red-500')}>
-            {uploadStatus.type === 'success' ? '✓ ' : '✕ '}{uploadStatus.text}
-          </p>
-        </div>
+        <p className={cn('text-[9px] px-4 mb-2', uploadStatus.startsWith('error') ? 'text-red-500' : 'text-green-600')}>
+          {uploadStatus.startsWith('error') ? '✕ ' + uploadStatus.slice(6) : '✓ Документ сохранён'}
+        </p>
       )}
 
-      {/* Форма ручного ввода результатов */}
-      {showManual && (
+      {/* Форма добавления показателя */}
+      {showEntry && (
         <div className="px-3 mb-3">
           <div className="bg-white rounded-[13px] border border-[#E5E5EA] p-3">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[11px] font-bold text-[#1C1C1E]">Внести результаты анализов</p>
-              <button onClick={() => { setShowManual(false); setManualText('') }}>
-                <X size={14} className="text-[#8E8E93]" />
-              </button>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[12px] font-bold text-[#1C1C1E]">Добавить показатель</p>
+              <button onClick={() => setShowEntry(false)}><X size={14} className="text-[#8E8E93]" /></button>
             </div>
-            <div className="bg-[#F2F2F7] rounded-[8px] p-2 mb-2">
-              <p className="text-[9px] text-[#8E8E93] font-medium mb-1">Формат ввода:</p>
-              <p className="text-[9px] font-mono text-[#3C3C43] leading-relaxed">
-                АЛТ: 95.9 U/l (норма 19-79)<br/>
-                Глюкоза: 4.9 mmol/l (норма 3.3-6.3)<br/>
-                Дата: 06.04.2024
-              </p>
-            </div>
-            <textarea value={manualText} onChange={e => setManualText(e.target.value)}
-              placeholder="Введи показатели из анализа..." rows={6}
-              className="w-full border border-[#E5E5EA] rounded-[8px] p-2 text-[10px] font-medium resize-none outline-none focus:border-[#FD6220] mb-2" />
-            {manualStatus && (
-              <p className={cn('text-[9px] mb-2', manualStatus.type === 'success' ? 'text-green-600' : 'text-red-500')}>
-                {manualStatus.type === 'success' ? '✓ ' : '✕ '}{manualStatus.text}
-              </p>
+
+            {/* Шаг 1: выбор типа */}
+            {!entry.mode ? (
+              <div className="flex flex-col gap-2">
+                <p className="text-[10px] text-[#8E8E93] mb-1">Это новый показатель или уже существующий?</p>
+                {existingParams.length > 0 && (
+                  <div>
+                    <p className="text-[9px] font-bold text-[#8E8E93] uppercase tracking-wide mb-2">Существующие</p>
+                    <div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto">
+                      {existingParams.map((p: any) => (
+                        <button key={p.parameter_key} onClick={() => selectExisting(p)}
+                          className="flex items-center justify-between p-2.5 rounded-[10px] bg-[#F2F2F7] text-left active:bg-[#FFF4EF]">
+                          <span className="text-[11px] font-semibold text-[#1C1C1E]">{p.parameter_name}</span>
+                          <span className="text-[9px] text-[#8E8E93]">{p.unit}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <button onClick={() => setEntry(prev => ({ ...prev, mode: 'new' }))}
+                  className="flex items-center gap-2 p-2.5 rounded-[10px] border-[1.5px] border-dashed border-[#FD6220] text-[#FD6220]">
+                  <Plus size={14} />
+                  <span className="text-[11px] font-bold">Новый показатель</span>
+                </button>
+              </div>
+            ) : (
+              /* Шаг 2: ввод данных */
+              <div className="flex flex-col gap-2.5">
+                {entry.mode === 'new' && (
+                  <>
+                    <div>
+                      <p className="text-[9px] font-bold text-[#8E8E93] uppercase tracking-wide mb-1">Название *</p>
+                      <input value={entry.paramName} onChange={e => setEntry(prev => ({ ...prev, paramName: e.target.value }))}
+                        placeholder="Например: АЛТ"
+                        className="w-full border border-[#E5E5EA] rounded-[8px] p-2.5 text-[11px] outline-none focus:border-[#FD6220]" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-[9px] font-bold text-[#8E8E93] uppercase tracking-wide mb-1">Единица</p>
+                        <input value={entry.paramUnit} onChange={e => setEntry(prev => ({ ...prev, paramUnit: e.target.value }))}
+                          placeholder="U/l"
+                          className="w-full border border-[#E5E5EA] rounded-[8px] p-2.5 text-[11px] outline-none focus:border-[#FD6220]" />
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-bold text-[#8E8E93] uppercase tracking-wide mb-1">Норма (мин–макс)</p>
+                        <div className="flex gap-1">
+                          <input value={entry.refMin} onChange={e => setEntry(prev => ({ ...prev, refMin: e.target.value }))}
+                            placeholder="19"
+                            className="w-full border border-[#E5E5EA] rounded-[8px] p-2.5 text-[11px] outline-none focus:border-[#FD6220]" />
+                          <input value={entry.refMax} onChange={e => setEntry(prev => ({ ...prev, refMax: e.target.value }))}
+                            placeholder="79"
+                            className="w-full border border-[#E5E5EA] rounded-[8px] p-2.5 text-[11px] outline-none focus:border-[#FD6220]" />
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {entry.mode === 'existing' && (
+                  <div className="bg-[#F2F2F7] rounded-[10px] p-2.5 flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-[#1C1C1E]">{entry.paramName}</span>
+                    <button onClick={() => setEntry(prev => ({ ...prev, mode: null }))}
+                      className="text-[9px] text-[#FD6220] font-bold">изменить</button>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <p className="text-[9px] font-bold text-[#8E8E93] uppercase tracking-wide mb-1">Значение *</p>
+                    <input type="number" value={entry.value} onChange={e => setEntry(prev => ({ ...prev, value: e.target.value }))}
+                      placeholder="95.9"
+                      className="w-full border border-[#E5E5EA] rounded-[8px] p-2.5 text-[11px] outline-none focus:border-[#FD6220]" />
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-bold text-[#8E8E93] uppercase tracking-wide mb-1">Дата *</p>
+                    <input type="date" value={entry.date} onChange={e => setEntry(prev => ({ ...prev, date: e.target.value }))}
+                      className="w-full border border-[#E5E5EA] rounded-[8px] p-2.5 text-[11px] outline-none focus:border-[#FD6220]" />
+                  </div>
+                </div>
+
+                {saveError && <p className="text-[9px] text-red-500">{saveError}</p>}
+
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  <button onClick={() => setEntry(prev => ({ ...prev, mode: null }))}
+                    className="bg-[#F2F2F7] text-[#8E8E93] font-bold rounded-[10px] py-2.5 text-[10px]">← Назад</button>
+                  <button onClick={saveEntry} disabled={saving}
+                    className="bg-[#FD6220] text-white font-bold rounded-[10px] py-2.5 text-[10px] disabled:opacity-50">
+                    {saving ? 'Сохраняю...' : 'Сохранить'}
+                  </button>
+                </div>
+              </div>
             )}
-            <button onClick={submitManual} disabled={!manualText.trim() || submittingManual}
-              className="w-full bg-[#FD6220] text-white font-bold rounded-[10px] py-2.5 text-[10px] disabled:opacity-50">
-              {submittingManual ? 'AI анализирует...' : 'Сохранить в динамику'}
-            </button>
           </div>
         </div>
       )}
@@ -210,13 +298,11 @@ export default function DocumentsPage() {
       <div className="px-3 mb-3">
         <div className="bg-white rounded-[10px] border border-[#E5E5EA] p-0.5 flex">
           <button onClick={() => { setTab('docs'); if(petId) loadAll(petId) }}
-            className={cn('flex-1 rounded-[8px] py-1.5 text-[9px] font-bold',
-              tab === 'docs' ? 'bg-[#FD6220] text-white' : 'text-[#8E8E93]')}>
+            className={cn('flex-1 rounded-[8px] py-1.5 text-[9px] font-bold', tab === 'docs' ? 'bg-[#FD6220] text-white' : 'text-[#8E8E93]')}>
             Документы ({documents.length})
           </button>
           <button onClick={() => { setTab('dynamics'); if(petId) loadAll(petId) }}
-            className={cn('flex-1 rounded-[8px] py-1.5 text-[9px] font-bold',
-              tab === 'dynamics' ? 'bg-[#FD6220] text-white' : 'text-[#8E8E93]')}>
+            className={cn('flex-1 rounded-[8px] py-1.5 text-[9px] font-bold', tab === 'dynamics' ? 'bg-[#FD6220] text-white' : 'text-[#8E8E93]')}>
             Динамика ({labResults.length})
           </button>
         </div>
@@ -230,7 +316,6 @@ export default function DocumentsPage() {
             <div className="text-center py-12 text-[#8E8E93]">
               <p className="text-4xl mb-3">📋</p>
               <p className="text-sm font-medium">Документов пока нет</p>
-              <p className="text-[10px] mt-1">Загрузи PDF или DOCX</p>
             </div>
           ) : (
             documents.map((doc: any) => (
@@ -273,7 +358,7 @@ export default function DocumentsPage() {
               <div className="text-center py-12 text-[#8E8E93]">
                 <p className="text-4xl mb-3">📊</p>
                 <p className="text-sm font-medium">Показателей пока нет</p>
-                <p className="text-[10px] mt-1">Нажми «Внести результаты» чтобы добавить</p>
+                <p className="text-[10px] mt-1">Нажми «Добавить показатель»</p>
               </div>
             ) : (
               <div className="flex flex-col gap-3">
@@ -282,7 +367,6 @@ export default function DocumentsPage() {
                   const latest = sorted[sorted.length - 1]
                   const hasAbnormal = sorted.some((v:any) => v.is_abnormal)
                   const maxVal = Math.max(...sorted.map((v:any) => Number(v.value) || 0), Number(latest.ref_max) || 0) * 1.2 || 1
-
                   return (
                     <div key={key} className="bg-white rounded-[13px] border border-[#E5E5EA] overflow-hidden">
                       <div style={{height: '3px', background: hasAbnormal ? '#FD6220' : '#34C759'}} />
@@ -295,40 +379,34 @@ export default function DocumentsPage() {
                             </p>
                           </div>
                           <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full flex-shrink-0"
-                            style={{
-                              background: hasAbnormal ? '#FFF4EF' : '#F0FFF4',
-                              color: hasAbnormal ? '#FD6220' : '#1A7F37',
-                              border: `1px solid ${hasAbnormal ? '#FDD5C0' : '#A3E6B8'}`,
-                            }}>
+                            style={{ background: hasAbnormal ? '#FFF4EF' : '#F0FFF4', color: hasAbnormal ? '#FD6220' : '#1A7F37', border: `1px solid ${hasAbnormal ? '#FDD5C0' : '#A3E6B8'}` }}>
                             {hasAbnormal ? 'отклонение' : 'норма'}
                           </span>
                         </div>
                         {sorted.length === 1 ? (
                           <div className="flex items-center gap-3">
                             <div className="rounded-[10px] px-5 py-2.5 text-center flex-shrink-0"
-                              style={{background: hasAbnormal ? '#FFF4EF' : '#F0FFF4', border: `1px solid ${hasAbnormal ? '#FDD5C0' : '#A3E6B8'}`}}>
-                              <p className="text-[26px] font-bold m-0" style={{color: hasAbnormal ? '#FD6220' : '#1A7F37'}}>
-                                {sorted[0].value ?? sorted[0].value_text ?? '—'}
+                              style={{ background: hasAbnormal ? '#FFF4EF' : '#F0FFF4', border: `1px solid ${hasAbnormal ? '#FDD5C0' : '#A3E6B8'}` }}>
+                              <p className="text-[26px] font-bold m-0" style={{ color: hasAbnormal ? '#FD6220' : '#1A7F37' }}>
+                                {sorted[0].value ?? '—'}
                               </p>
                               <p className="text-[10px] font-semibold text-[#8E8E93] mt-0.5">
                                 {format(new Date(sorted[0].document_date + 'T12:00:00'), 'dd.MM.yy')}
                               </p>
                             </div>
-                            <p className="text-[11px] font-medium text-[#8E8E93] flex-1 leading-relaxed">Добавь ещё анализы чтобы видеть динамику</p>
+                            <p className="text-[11px] font-medium text-[#8E8E93] flex-1 leading-relaxed">Добавь ещё результат чтобы видеть динамику</p>
                           </div>
                         ) : (
                           <div>
-                            <div className="flex items-end gap-2.5" style={{height: '64px'}}>
+                            <div className="flex items-end gap-2.5" style={{ height: '64px' }}>
                               {sorted.map((v:any, i:number) => {
                                 const isLast = i === sorted.length - 1
                                 const barH = Math.max(8, Math.round((Number(v.value) / maxVal) * 52))
                                 const barColor = v.is_abnormal ? (isLast ? '#FD6220' : '#FF9F6B') : (isLast ? '#34C759' : '#6EE48A')
                                 return (
                                   <div key={i} className="flex flex-col items-center gap-1 flex-1">
-                                    <span className="text-[12px] font-bold" style={{color: v.is_abnormal ? '#FD6220' : '#1A7F37'}}>
-                                      {v.value ?? '—'}
-                                    </span>
-                                    <div className="w-full rounded-t-[4px]" style={{height: `${barH}px`, background: barColor}} />
+                                    <span className="text-[12px] font-bold" style={{ color: v.is_abnormal ? '#FD6220' : '#1A7F37' }}>{v.value ?? '—'}</span>
+                                    <div className="w-full rounded-t-[4px]" style={{ height: `${barH}px`, background: barColor }} />
                                   </div>
                                 )
                               })}
@@ -343,8 +421,8 @@ export default function DocumentsPage() {
                               ))}
                             </div>
                             {latest.ref_max !== null && (
-                              <div className="pt-2" style={{borderTop: `1px dashed ${hasAbnormal ? '#FDD5C0' : '#A3E6B8'}`}}>
-                                <span className="text-[10px] font-medium" style={{color: hasAbnormal ? '#FD6220' : '#1A7F37'}}>
+                              <div className="pt-2" style={{ borderTop: `1px dashed ${hasAbnormal ? '#FDD5C0' : '#A3E6B8'}` }}>
+                                <span className="text-[10px] font-medium" style={{ color: hasAbnormal ? '#FD6220' : '#1A7F37' }}>
                                   — верхняя граница нормы: {latest.ref_max} {latest.unit}
                                 </span>
                               </div>
