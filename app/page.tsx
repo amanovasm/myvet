@@ -6,6 +6,7 @@ import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { getAge, formatRelative, EVENT_TYPES } from '@/lib/utils'
 import TopBar from '@/components/TopBar'
+import { usePet } from '@/lib/pet-context'
 import BottomNav from '@/components/BottomNav'
 import Link from 'next/link'
 import { RefreshCw } from 'lucide-react'
@@ -23,6 +24,7 @@ const DIR_DOT: Record<string, string> = {
 
 export default function Dashboard() {
   const router = useRouter()
+  const { activePetId, activePet } = usePet()
 
   const [loading, setLoading] = useState(true)
   const [pet, setPet] = useState<any>(null)
@@ -38,7 +40,8 @@ export default function Dashboard() {
   const loadData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { window.location.href = '/login'; return }
-    const { data: p } = await supabase.from('pets').select('*').eq('user_id', user.id).limit(1).single()
+    if (!activePetId) { setLoading(false); return }
+    const { data: p } = await supabase.from('pets').select('*').eq('id', activePetId).single()
     if (!p) { setLoading(false); return }
     setPet(p)
 
@@ -62,7 +65,7 @@ export default function Dashboard() {
     setLoading(false)
   }, [today])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => { if (activePetId) loadData() }, [loadData, activePetId])
 
   useEffect(() => {
     const handleVisibility = () => { if (document.visibilityState === 'visible') loadData() }
