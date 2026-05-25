@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  // Always allow these paths
   if (
     pathname.startsWith('/login') ||
     pathname.startsWith('/auth') ||
@@ -14,12 +13,8 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // Check for supabase session cookie
   const cookies = req.cookies.getAll()
-  const hasSession = cookies.some(c =>
-    (c.name.startsWith('sb-') && c.name.includes('auth-token')) ||
-    c.name === 'supabase-auth-token'
-  )
+  const hasSession = cookies.some(c => c.name.startsWith('sb-') && c.name.includes('auth-token'))
 
   if (!hasSession) {
     return NextResponse.redirect(new URL('/login', req.url))
