@@ -124,7 +124,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-[#F2F2F7] flex flex-col pt-[52px] pb-[72px]">
-      <div className="bg-white sticky top-0 z-10"><TopBar petName={pet.name} /></div>
+      <div className="bg-white sticky top-0 z-10"><TopBar /></div>
 
       <div className="flex-1 px-3 py-3 flex flex-col gap-3">
         <p className="text-[12px] font-bold text-[#1C1C1E] capitalize">{todayStr}</p>
