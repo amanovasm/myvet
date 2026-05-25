@@ -1,11 +1,11 @@
 {
-  "name": "myvet.kz",
+  "name": "myvet — здоровье Мави",
   "short_name": "myvet",
-  "description": "Дневник здоровья для животных с эпилепсией",
+  "description": "Дневник здоровья для питомца",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#0F6E56",
+  "background_color": "#F2F2F7",
+  "theme_color": "#FD6220",
   "orientation": "portrait",
   "icons": [
     {
