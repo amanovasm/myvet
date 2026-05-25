@@ -59,7 +59,7 @@ export default function TopBar({ showBack, backHref = '/', backLabel = 'Наза
               {p.id === activePet?.id && <span className="text-[#FD6220] text-[10px] font-bold">✓</span>}
             </button>
           ))}
-          <Link href="/pet" onClick={() => setShowSwitcher(false)}
+          <Link href="/pet/new" onClick={() => setShowSwitcher(false)}
             className="flex items-center gap-2 px-3 py-2.5 text-[11px] font-bold text-[#FD6220] bg-[#FFF4EF]">
             + Добавить питомца
           </Link>
