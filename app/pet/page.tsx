@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { format } from 'date-fns'
 import { Check } from 'lucide-react'
 import TopBar from '@/components/TopBar'
+import { Camera } from 'lucide-react'
 import BottomNav from '@/components/BottomNav'
 import Link from 'next/link'
 
@@ -18,6 +19,8 @@ const Field = ({ label, children }: FieldProps) => (
 export default function PetPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [done, setDone] = useState(false)
   const [petId, setPetId] = useState<string | null>(null)
   const [name, setName] = useState('')
@@ -43,6 +46,7 @@ export default function PetPage() {
         setBreed(data.breed || '')
         setBirthDate(data.birth_date || '')
         setGender(data.gender || 'female')
+        setPhotoUrl(data.photo_url || null)
         setDiagnoses(data.diagnoses || '')
         setAllergies(data.allergies || '')
         setVetNotes(data.vet_notes || '')
@@ -52,10 +56,24 @@ export default function PetPage() {
     })()
   }, [])
 
+  async function uploadPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !petId) return
+    setUploadingPhoto(true)
+    const ext = file.name.split('.').pop()
+    const path = `${petId}/${Date.now()}.${ext}`
+    const { error } = await supabase.storage.from('pet-photos').upload(path, file, { upsert: true })
+    if (!error) {
+      const { data } = supabase.storage.from('pet-photos').getPublicUrl(path)
+      setPhotoUrl(data.publicUrl)
+    }
+    setUploadingPhoto(false)
+  }
+
   async function save() {
     if (!name) return
     setSaving(true)
-    const petData = { name, species, breed: breed || null, birth_date: birthDate || null, gender, diagnoses: diagnoses || null, allergies: allergies || null, vet_notes: vetNotes || null }
+    const petData = { name, species, breed: breed || null, birth_date: birthDate || null, gender, diagnoses: diagnoses || null, allergies: allergies || null, vet_notes: vetNotes || null, photo_url: photoUrl }
     let savedId = petId
     if (petId) {
       await supabase.from('pets').update(petData).eq('id', petId)
@@ -100,6 +118,26 @@ export default function PetPage() {
         </div>
       )}
       <div className="px-3 py-3 flex flex-col gap-3">
+          {/* Фото питомца */}
+          <div className="flex justify-center">
+            <label className="relative cursor-pointer">
+              <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-[#FD6220] bg-[#F2F2F7] flex items-center justify-center">
+                {photoUrl ? (
+                  <img src={photoUrl} alt="Фото питомца" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-3xl">🐱</span>
+                )}
+              </div>
+              <div className="absolute bottom-0 right-0 w-6 h-6 bg-[#FD6220] rounded-full flex items-center justify-center">
+                {uploadingPhoto ? (
+                  <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Camera size={12} className="text-white" />
+                )}
+              </div>
+              <input type="file" accept="image/*" className="hidden" onChange={uploadPhoto} disabled={uploadingPhoto} />
+            </label>
+          </div>
         <div className="card">
           <Field label="Вид">
             <div className="grid grid-cols-2 gap-2">
