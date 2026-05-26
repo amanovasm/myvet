@@ -31,7 +31,12 @@ export default function TopBar({ showBack, backHref = '/', backLabel = 'Наза
           {/* Pet switcher - always clickable */}
           {activePet && (
             <button onClick={() => setShowSwitcher(!showSwitcher)}
-              className="flex items-center gap-1 bg-[#FFF4EF] px-2 py-1 rounded-[8px] border border-[#FDD5C0]">
+              className="flex items-center gap-1.5 bg-[#FFF4EF] px-2 py-1 rounded-[8px] border border-[#FDD5C0]">
+              {activePet.photo_url ? (
+                <img src={activePet.photo_url} alt={activePet.name} className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
+              ) : (
+                <span className="text-[14px]">🐾</span>
+              )}
               <span className="text-[11px] font-bold text-[#FD6220]">{activePet.name}</span>
               <ChevronDown size={12} className="text-[#FD6220]" />
             </button>
@@ -51,7 +56,11 @@ export default function TopBar({ showBack, backHref = '/', backLabel = 'Наза
           {pets.map((p: any) => (
             <button key={p.id} onClick={() => { setActivePetId(p.id); setShowSwitcher(false) }}
               className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-[#FFF4EF] border-b border-[#F2F2F7] last:border-0">
-              <span className="text-base">🐾</span>
+              {p.photo_url ? (
+                <img src={p.photo_url} alt={p.name} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+              ) : (
+                <span className="text-base">🐾</span>
+              )}
               <div className="flex-1">
                 <p className="text-[12px] font-bold text-[#1C1C1E]">{p.name}</p>
                 <p className="text-[9px] text-[#8E8E93]">{p.species || 'Питомец'}</p>
