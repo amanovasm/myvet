@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { PetProvider } from '@/lib/pet-context'
+import AmplitudeInit from '@/components/AmplitudeInit'
 
 export const metadata: Metadata = {
   title: 'myvet — здоровье питомца',
@@ -23,6 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="manifest" href="/manifest.json" />
       </head>
       <body className="min-h-screen bg-[#F2F2F7]">
+        <AmplitudeInit />
         <PetProvider>
           <div className="max-w-md mx-auto min-h-screen relative">
             {children}
