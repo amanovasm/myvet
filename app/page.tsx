@@ -24,7 +24,7 @@ const DIR_DOT: Record<string, string> = {
 
 export default function Dashboard() {
   const router = useRouter()
-  const { activePetId, activePet } = usePet()
+  const { activePetId, activePet, loading: petLoading } = usePet()
 
   const [loading, setLoading] = useState(true)
   const [pet, setPet] = useState<any>(null)
