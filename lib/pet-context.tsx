@@ -6,7 +6,7 @@ interface PetContextType {
   pets: any[]
   activePet: any | null
   activePetId: string | null
-  petId: string | null  // alias for activePetId
+  petId: string | null
   setActivePetId: (id: string) => void
   loading: boolean
   refetch: () => void
@@ -14,7 +14,7 @@ interface PetContextType {
 
 const PetContext = createContext<PetContextType>({
   pets: [], activePet: null, activePetId: null, petId: null,
-  setActivePetId: () => {}, loading: true, refetch: () => {}
+  setActivePetId: () => {}, loading: false, refetch: () => {}
 })
 
 export function PetProvider({ children }: { children: ReactNode }) {
@@ -23,26 +23,45 @@ export function PetProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   async function load() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
+    try {
+      setLoading(true)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { setLoading(false); return }
 
-    const { data } = await supabase
-      .from('pets')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: true })
+      const { data } = await supabase
+        .from('pets')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true })
 
-    if (data && data.length > 0) {
-      setPets(data)
-      // Restore last active pet from localStorage
-      const saved = localStorage.getItem('activePetId')
-      const valid = saved && data.find((p: any) => p.id === saved)
-      setActivePetIdState(valid ? saved : data[0].id)
+      if (data && data.length > 0) {
+        setPets(data)
+        const saved = localStorage.getItem('activePetId')
+        const valid = saved && data.find((p: any) => p.id === saved)
+        setActivePetIdState(valid ? saved : data[0].id)
+      } else {
+        setPets([])
+        setActivePetIdState(null)
+      }
+    } catch (e) {
+      console.error('Pet context error:', e)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN') load()
+      if (event === 'SIGNED_OUT') {
+        setPets([])
+        setActivePetIdState(null)
+        setLoading(false)
+      }
+    })
+    return () => subscription.unsubscribe()
+  }, [])
 
   function setActivePetId(id: string) {
     setActivePetIdState(id)
