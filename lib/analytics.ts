@@ -7,12 +7,8 @@ export function initAmplitude() {
   if (initialized || typeof window === 'undefined') return
   const apiKey = process.env.NEXT_PUBLIC_AMPLITUDE_API_KEY
   if (!apiKey) return
-  
-  amplitude.init(apiKey, {
-    defaultTracking: true,
-    plugins: [sessionReplayPlugin({ sampleRate: 1 })],
-  })
-  
+  amplitude.init(apiKey, { defaultTracking: true })
+  amplitude.add(sessionReplayPlugin({ sampleRate: 1 }))
   initialized = true
 }
 
