@@ -100,20 +100,7 @@ export default function Dashboard() {
     </div>
   )
 
-  if (!pet) return (
-    <div className="min-h-screen bg-[#F2F2F7] pt-[52px] pb-[72px] flex flex-col">
-      <TopBar />
-      <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6">
-        <div className="text-5xl">🐱</div>
-        <h1 className="text-[18px] font-bold text-center text-[#1C1C1E]">Добро пожаловать в myvet</h1>
-        <p className="text-[13px] text-[#8E8E93] text-center">Добавьте питомца чтобы начать вести дневник</p>
-        <Link href="/pet/new" className="bg-[#FD6220] text-white font-bold rounded-[12px] py-3 px-8 text-[13px]">
-          + Добавить питомца
-        </Link>
-      </div>
-      <BottomNav />
-    </div>
-  )
+  if (!pet) { if (typeof window !== "undefined") window.location.href = "/welcome"; return null }
 
   const todayStr = format(new Date(), 'EEEE, d MMMM yyyy', { locale: ru })
 
